@@ -41,7 +41,8 @@ function issueDetails(issues) {
   return issues
     .map((issue) => {
       const replacements = issue.replacements?.length ? `; замены: ${issue.replacements.join(", ")}` : "";
-      return `${issue.term} (${RISK_LABELS[issue.risk] || issue.risk}): ${issue.reason}${replacements}`;
+      const sources = issue.sources?.length ? `; источники: ${issue.sources.join("; ")}` : "";
+      return `${issue.term} (${RISK_LABELS[issue.risk] || issue.risk}): ${issue.reason}${replacements}${sources}`;
     })
     .join("\n");
 }
@@ -57,12 +58,18 @@ function aggregateByTerm(rows) {
           term: issue.term,
           risk: issue.risk,
           replacements: issue.replacements || [],
+          sources: issue.sources || [],
           count: 0,
           ads: []
         };
       }
       map[key].count += 1;
       map[key].ads.push(row.request_id);
+      for (const source of issue.sources || []) {
+        if (!map[key].sources.includes(source)) {
+          map[key].sources.push(source);
+        }
+      }
       if (riskWeight[issue.risk] > riskWeight[map[key].risk]) {
         map[key].risk = issue.risk;
       }
@@ -111,6 +118,7 @@ export function exportResultsXlsx(rows, sourceRows = [], filename = "стопс�
     "Риск": RISK_LABELS[item.risk] || item.risk,
     "Количество": item.count,
     "Рекомендуемая замена": item.replacements[0] || "",
+    "Источники": item.sources.join("; "),
     "ID объявлений": item.ads.join(", ")
   }));
 
@@ -129,7 +137,7 @@ export function exportResultsXlsx(rows, sourceRows = [], filename = "стопс�
 
   const workbook = XLSX.utils.book_new();
   const summarySheet = sheetFromRows(summaryData);
-  summarySheet["!cols"] = [{ wch: 24 }, { wch: 14 }, { wch: 12 }, { wch: 28 }, { wch: 80 }];
+  summarySheet["!cols"] = [{ wch: 24 }, { wch: 14 }, { wch: 12 }, { wch: 28 }, { wch: 70 }, { wch: 80 }];
   XLSX.utils.book_append_sheet(workbook, summarySheet, "Сводка по словам");
 
   const resultSheet = sheetFromRows(resultData);

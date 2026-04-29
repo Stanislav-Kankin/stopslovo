@@ -18,12 +18,18 @@ export function aggregateByTerm(results) {
           normalized: issue.normalized,
           risk: issue.risk,
           replacements: issue.replacements || [],
+          sources: issue.sources || [],
           count: 0,
           ads: []
         };
       }
       map[key].count += 1;
       map[key].ads.push(result.request_id);
+      for (const source of issue.sources || []) {
+        if (!map[key].sources.includes(source)) {
+          map[key].sources.push(source);
+        }
+      }
       if (riskWeight[issue.risk] > riskWeight[map[key].risk]) {
         map[key].risk = issue.risk;
       }
@@ -56,11 +62,12 @@ export function BatchSummary({ results, selectedTerm, onSelectTerm, onDownloadXl
       </div>
 
       <div className="overflow-hidden rounded-md border border-slate-200 dark:border-[#38505c]">
-        <div className="grid grid-cols-[1.1fr_110px_90px_1.4fr] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-[#38505c] dark:bg-[#1b2a34] dark:text-[#c7d5d1]">
+        <div className="hidden grid-cols-[1fr_100px_80px_1.2fr_1.4fr] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-[#38505c] dark:bg-[#1b2a34] dark:text-[#c7d5d1] md:grid">
           <span>Слово</span>
           <span>Риск</span>
           <span>Встреч.</span>
           <span>Замены</span>
+          <span>Источники</span>
         </div>
         <div className="max-h-[360px] divide-y divide-slate-200 overflow-auto dark:divide-[#38505c]">
           {terms.map((term) => {
@@ -68,13 +75,16 @@ export function BatchSummary({ results, selectedTerm, onSelectTerm, onDownloadXl
             return (
               <button
                 key={term.normalized}
-                className={`grid w-full grid-cols-[1.1fr_110px_90px_1.4fr] gap-3 px-3 py-2 text-left text-sm transition ${selected ? "bg-emerald-50 dark:bg-[#203c34]" : "hover:bg-slate-50 dark:hover:bg-[#1b2a34]"}`}
+                className={`grid w-full grid-cols-1 gap-1 px-3 py-3 text-left text-sm transition md:grid-cols-[1fr_100px_80px_1.2fr_1.4fr] md:gap-3 md:py-2 ${selected ? "bg-emerald-50 dark:bg-[#203c34]" : "hover:bg-slate-50 dark:hover:bg-[#1b2a34]"}`}
                 onClick={() => onSelectTerm(selected ? "" : term.normalized)}
               >
                 <strong>{term.term}</strong>
                 <span>{riskLabels[term.risk] || term.risk}</span>
                 <span>{term.count}</span>
                 <span className="text-slate-600 dark:text-slate-300">{term.replacements.length ? term.replacements.join(", ") : "Проверить вручную"}</span>
+                <span className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                  {term.sources.length ? term.sources.join("; ") : "Источник не указан"}
+                </span>
               </button>
             );
           })}

@@ -23,6 +23,8 @@ def test_check_text_flags_high_risk_ad() -> None:
     terms = {issue["normalized"] for issue in data["issues"]}
     assert "sale" in terms
     assert "кешбэк" in terms
+    sale_issue = next(issue for issue in data["issues"] if issue["normalized"] == "sale")
+    assert sale_issue["sources"]
     assert "Это автоматическая оценка риска, не юридическое заключение." in data["summary"]
 
 

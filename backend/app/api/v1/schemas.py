@@ -35,6 +35,7 @@ class Issue(BaseModel):
     risk: RiskLevel
     reason: str
     replacements: list[str]
+    sources: list[str] = Field(default_factory=list)
     keep_as_is: bool
 
 

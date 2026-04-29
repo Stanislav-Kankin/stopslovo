@@ -4,6 +4,12 @@ from pathlib import Path
 from app.services.risk_scorer import apply_context_modifier
 
 
+RAN_SOURCE_NOTE = (
+    "Не найдено в словарях РАН: орфографическом, орфоэпическом, словаре иностранных слов "
+    "и толковом словаре государственного языка."
+)
+
+
 class DictionaryChecker:
     def __init__(self, dictionary_path: Path | None = None) -> None:
         self.dictionary_path = dictionary_path or Path(__file__).resolve().parents[1] / "data" / "dictionary.json"
@@ -38,6 +44,10 @@ class DictionaryChecker:
                     "risk_base": "medium",
                     "reason": "Латинское слово отсутствует в словаре; нужно проверить, не является ли оно брендом, товарным знаком или заменяемым иностранным словом.",
                     "replacements": [],
+                    "sources": [
+                        f"Локальный словарь англицизмов и заимствований СтопСлово v{self.version}: слово не найдено.",
+                        RAN_SOURCE_NOTE,
+                    ],
                     "keep_as_is": True,
                     "start": match.get("start"),
                     "end": match.get("end"),
@@ -70,6 +80,10 @@ class DictionaryChecker:
                 "risk_base": "medium",
                 "reason": "Слово не найдено в нормативной морфологии и белом списке; нужен контекстный разбор, не является ли оно брендом, опечаткой или заимствованием.",
                 "replacements": [],
+                "sources": [
+                    "pymorphy3: слово не распознано как известная русская форма.",
+                    RAN_SOURCE_NOTE,
+                ],
                 "keep_as_is": True,
                 "start": token.get("start"),
                 "end": token.get("end"),
@@ -92,6 +106,10 @@ class DictionaryChecker:
             "risk_base": risk,
             "reason": self._reason(entry, risk),
             "replacements": entry["replacements"],
+            "sources": [
+                f"Локальный словарь англицизмов и заимствований СтопСлово v{self.version}.",
+                f"Категория словаря: {entry.get('category', 'не указана')}.",
+            ],
             "keep_as_is": risk in {"low", "safe"} or not entry["replacements"],
             "start": token.get("start"),
             "end": token.get("end"),

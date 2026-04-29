@@ -64,7 +64,12 @@ export function toCsv(rows) {
         row.request_id,
         riskLabels[row.overall_risk] || row.overall_risk,
         row.manual_review_required ? "да" : "нет",
-        row.issues.map((issue) => `${issue.term}: ${riskLabels[issue.risk] || issue.risk}`).join("; "),
+        row.issues
+          .map((issue) => {
+            const sources = issue.sources?.length ? `, источники: ${issue.sources.join("; ")}` : "";
+            return `${issue.term}: ${riskLabels[issue.risk] || issue.risk}${sources}`;
+          })
+          .join("; "),
         row.rewritten_text,
         localizeSystemText(row.summary)
       ]

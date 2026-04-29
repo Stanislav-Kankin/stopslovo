@@ -208,6 +208,11 @@ function ResultView({ result }) {
                 </div>
                 <p className="text-sm text-slate-600 dark:text-slate-300">{issue.reason}</p>
                 {issue.replacements.length > 0 && <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">Замены: {issue.replacements.join(", ")}</p>}
+                {issue.sources?.length > 0 && (
+                  <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                    Источники: {issue.sources.join("; ")}
+                  </p>
+                )}
               </article>
             ))}
           </div>
@@ -492,6 +497,11 @@ function HomePage({ me, refreshMe }) {
                                       <RiskBadge risk={issue.risk} />
                                       {issue.replacements.length > 0 && <span className="text-slate-600 dark:text-slate-300">→ замены: {issue.replacements.join(", ")}</span>}
                                     </div>
+                                    {issue.sources?.length > 0 && (
+                                      <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                                        Источники: {issue.sources.join("; ")}
+                                      </p>
+                                    )}
                                   </div>
                                 ))}
                               </div>

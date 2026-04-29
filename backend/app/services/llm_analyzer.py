@@ -137,8 +137,8 @@ class LLMAnalyzer:
         if use_llm and self._has_provider_key():
             try:
                 if self.provider == "anthropic":
-                    return self._analyze_with_anthropic(text, context_type, flagged)
-                return self._analyze_with_deepseek(text, context_type, flagged)
+                    return self._attach_sources(self._analyze_with_anthropic(text, context_type, flagged), flagged)
+                return self._attach_sources(self._analyze_with_deepseek(text, context_type, flagged), flagged)
             except Exception as exc:
                 logger.exception("%s analysis failed: %s", self.provider, exc)
                 return self._fallback(text, context_type, flagged, llm_failed=True)
@@ -171,6 +171,7 @@ class LLMAnalyzer:
                     "script": item["script"],
                     "risk_base": item["risk"],
                     "known_replacements": item["replacements"],
+                    "sources": item.get("sources", []),
                 }
                 for item in flagged
             ],
@@ -229,6 +230,7 @@ class LLMAnalyzer:
                 "reason": item["reason"],
                 "replacements": item["replacements"],
                 "keep_as_is": item["keep_as_is"],
+                "sources": item.get("sources", []),
             }
             for item in flagged
             if item["risk"] != "safe"
@@ -245,6 +247,27 @@ class LLMAnalyzer:
             "manual_review_required": manual,
             "manual_review_reason": reason,
         }
+
+    @staticmethod
+    def _attach_sources(data: dict[str, Any], flagged: list[dict]) -> dict[str, Any]:
+        sources_by_normalized = {
+            str(item.get("normalized", "")).lower(): item.get("sources", [])
+            for item in flagged
+            if item.get("normalized")
+        }
+        sources_by_term = {
+            str(item.get("term", "")).lower(): item.get("sources", [])
+            for item in flagged
+            if item.get("term")
+        }
+        for issue in data.get("issues", []):
+            if issue.get("sources"):
+                continue
+            normalized = str(issue.get("normalized", "")).lower()
+            term = str(issue.get("term", "")).lower()
+            sources = sources_by_normalized.get(normalized) or sources_by_term.get(term)
+            issue["sources"] = sources or ["Найдено нейросетевым разбором; требуется ручная проверка источника."]
+        return data
 
     @staticmethod
     def _rewrite(text: str, issues: list[dict]) -> str:

@@ -16,6 +16,9 @@ class RanLexicon:
         if not self._use_sqlite and self.path.exists():
             raw = json.loads(self.path.read_text(encoding="utf-8"))
             self.words = {entry["word"] for entry in raw.get("entries", [])}
+            self._json_sources = {entry["word"]: entry.get("sources", []) for entry in raw.get("entries", [])}
+        else:
+            self._json_sources = {}
 
     def contains(self, word: str) -> bool:
         normalized = word.lower().replace("ё", "е")
@@ -23,3 +26,25 @@ class RanLexicon:
             row = self._connection.execute("SELECT 1 FROM words WHERE word = ? LIMIT 1", (normalized,)).fetchone()
             return row is not None
         return normalized in self.words
+
+    def sources_for(self, word: str) -> list[str]:
+        normalized = word.lower().replace("ё", "е")
+        if self._connection:
+            rows = self._connection.execute(
+                """
+                SELECT sources.title
+                FROM word_sources
+                JOIN sources ON sources.code = word_sources.source
+                WHERE word_sources.word = ?
+                ORDER BY sources.title
+                """,
+                (normalized,),
+            ).fetchall()
+            return [row[0] for row in rows]
+        labels = {
+            "orthographic": "Орфографический словарь русского языка как государственного языка РФ",
+            "orthoepic": "Орфоэпический словарь русского языка как государственного языка РФ",
+            "foreign": "Словарь иностранных слов",
+            "explanatory": "Толковый словарь государственного языка Российской Федерации",
+        }
+        return [labels.get(source, source) for source in self._json_sources.get(normalized, [])]
