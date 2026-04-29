@@ -2,6 +2,7 @@ import { AlertTriangle, Check, Clipboard, Download, FileText, Moon, Search, Sun 
 import { useMemo, useState } from "react";
 
 import { toCsv } from "./utils/csv";
+import { exportResultsXlsx } from "./utils/exportResults";
 import { importRowsFromFile } from "./utils/importRows";
 
 const BATCH_CHUNK_SIZE = 100;
@@ -275,6 +276,10 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const exportXlsx = () => {
+    exportResultsXlsx(sortedResults);
+  };
+
   return (
     <div className={dark ? "dark" : ""}>
       <main className="min-h-screen bg-[#f5f5f2] text-[#1a1a18] transition-colors dark:bg-[#121512] dark:text-[#f4f4ee]">
@@ -394,6 +399,7 @@ export default function App() {
                       <button className="secondary-button" disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Назад</button>
                       <button className="secondary-button" disabled={currentPage >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Вперед</button>
                     </div>
+                    <button className="primary-button" onClick={exportXlsx}><Download className="h-4 w-4" /> XLSX</button>
                     <button className="secondary-button" onClick={exportCsv}><Download className="h-4 w-4" /> CSV</button>
                   </div>
                   <table className="w-full min-w-[760px] text-left text-sm">
