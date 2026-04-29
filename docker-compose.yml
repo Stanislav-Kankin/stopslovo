@@ -12,8 +12,17 @@ services:
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-haiku-4-5-20251001}
       LLM_MAX_TEXT_CHARS: ${LLM_MAX_TEXT_CHARS:-4000}
       LLM_MAX_FLAGGED_TERMS: ${LLM_MAX_FLAGGED_TERMS:-20}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      FRONTEND_URL: ${FRONTEND_URL:-https://localhost}
+      BACKEND_URL: ${BACKEND_URL:-https://localhost}
+      YANDEX_CLIENT_ID: ${YANDEX_CLIENT_ID:-}
+      YANDEX_CLIENT_SECRET: ${YANDEX_CLIENT_SECRET:-}
+      VK_CLIENT_ID: ${VK_CLIENT_ID:-}
+      VK_CLIENT_SECRET: ${VK_CLIENT_SECRET:-}
     expose:
       - "8000"
+    volumes:
+      - backend_data:/app/app/data
 
   frontend:
     build:
@@ -30,3 +39,6 @@ services:
     volumes:
       - ${SSL_CERT_PATH:-./deploy/certs/fullchain.pem}:/etc/nginx/certs/fullchain.pem:ro
       - ${SSL_KEY_PATH:-./deploy/certs/privkey.pem}:/etc/nginx/certs/privkey.pem:ro
+
+volumes:
+  backend_data:
