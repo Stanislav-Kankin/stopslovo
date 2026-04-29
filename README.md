@@ -135,6 +135,43 @@ cd backend
 pytest
 ```
 
+## Обогащение словаря
+
+Основной словарь лежит в `backend/app/data/dictionary.json`. Его можно пополнять вручную, но лучше использовать CLI-помощник, чтобы не сломать структуру JSON и не добавить дубль.
+
+Проверить словарь:
+
+```bash
+cd backend
+python tools/dictionary_tool.py validate
+```
+
+Добавить латинское слово:
+
+```bash
+python tools/dictionary_tool.py add \
+  --term dropshipping \
+  --script latin \
+  --category retail \
+  --risk medium \
+  --replacement "прямая поставка" \
+  --replacement "продажа со склада поставщика"
+```
+
+Добавить кириллическое заимствование:
+
+```bash
+python tools/dictionary_tool.py add \
+  --term "реферальный" \
+  --script cyrillic_borrowing \
+  --category marketing \
+  --risk medium \
+  --replacement "по рекомендации" \
+  --replacement "партнерский"
+```
+
+Практический процесс такой: смотрите слова, которые часто попадают в категорию `missed_by_dictionary`, вручную решаете, это бренд/норма/риск, затем добавляете устойчивые случаи в словарь. Для полностью освоенных слов ставьте `risk_base: safe`, чтобы сервис перестал их флагать.
+
 ## Переменные окружения
 
 - `DEEPSEEK_API_KEY` - ключ DeepSeek API. Если не задан, используется локальная проверка.

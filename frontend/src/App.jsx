@@ -204,16 +204,21 @@ export default function App() {
 
   return (
     <div className={dark ? "dark" : ""}>
-      <main className="min-h-screen bg-stone-50 text-slate-950 transition-colors dark:bg-slate-950 dark:text-white">
-        <header className="border-b border-slate-200 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-950/80">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
+      <main className="min-h-screen bg-sky-50/40 text-slate-950 transition-colors dark:bg-slate-950 dark:text-white">
+        <header className="site-header">
+          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5">
             <div>
-              <h1 className="font-serif text-4xl leading-none">StopSlovo</h1>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Автоматическая оценка риска для рекламных текстов</p>
+              <h1 className="font-serif text-5xl leading-none tracking-normal text-slate-950 dark:text-white">СтопСлово</h1>
+              <p className="mt-2 text-sm font-medium text-slate-600 dark:text-sky-100/80">Автоматическая оценка риска для рекламных текстов</p>
             </div>
-            <button className="icon-button" onClick={() => setDark((value) => !value)} title="Переключить тему">
-              {dark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-            </button>
+            <div className="flex items-center gap-3">
+              <span className="hidden rounded-md border border-sky-200 bg-white/65 px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm dark:border-sky-800/70 dark:bg-slate-950/35 dark:text-sky-100 sm:inline-flex">
+                149-ФЗ · рекламные тексты
+              </span>
+              <button className="icon-button header-theme-button" onClick={() => setDark((value) => !value)} title="Переключить тему">
+                {dark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+              </button>
+            </div>
           </div>
         </header>
 
