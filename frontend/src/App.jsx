@@ -1,4 +1,4 @@
-import { AlertTriangle, Check, Clipboard, Download, FileText, Moon, Search, Sun } from "lucide-react";
+﻿import { AlertTriangle, Check, Clipboard, Download, FileText, Moon, Search, Sun } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { toCsv } from "./utils/csv";
@@ -132,14 +132,14 @@ function ResultView({ result }) {
 
       <div className="grid gap-5 lg:grid-cols-[1fr_0.9fr]">
         <div className="panel">
-          <p className="eyebrow">оригинал</p>
+          <p className="eyebrow">текст</p>
           <h2 className="section-title">Исходный текст</h2>
           <HighlightedText text={result.original_text} issues={result.issues} />
         </div>
         <div className="panel">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
-              <p className="eyebrow">замены</p>
+              <p className="eyebrow">результат</p>
               <h2 className="section-title">Переписанный текст</h2>
             </div>
             <button className="icon-button" onClick={copy} title="Скопировать">
@@ -151,7 +151,7 @@ function ResultView({ result }) {
       </div>
 
       <div className="panel">
-        <p className="eyebrow">детали</p>
+        <p className="eyebrow">замечания</p>
         <h2 className="section-title">Замечания</h2>
         {result.issues.length === 0 ? (
           <p className="text-slate-600 dark:text-slate-300">Автоматическая проверка не нашла слов из зоны риска.</p>
@@ -175,7 +175,7 @@ function ResultView({ result }) {
       </div>
 
       <div className="panel">
-        <p className="eyebrow">summary</p>
+        <p className="eyebrow">резюме</p>
         <h2 className="section-title">Краткое резюме</h2>
         <p className="text-slate-700 dark:text-slate-200">{result.summary}</p>
       </div>
@@ -199,6 +199,7 @@ export default function App() {
   const [sortDesc, setSortDesc] = useState(true);
   const [pageSize, setPageSize] = useState(20);
   const [page, setPage] = useState(1);
+  const [expandedResults, setExpandedResults] = useState(new Set());
 
   const sortedResults = useMemo(
     () => [...batchResults].sort((a, b) => (sortDesc ? riskWeight[b.overall_risk] - riskWeight[a.overall_risk] : riskWeight[a.overall_risk] - riskWeight[b.overall_risk])),
@@ -226,10 +227,15 @@ export default function App() {
     setError("");
     try {
       const imported = await importRowsFromFile(file);
-      setBatchRows(imported.rows);
+      const normalizedRows = imported.rows.map((row, index) => ({
+        ...row,
+        request_id: /^row-\d+$/.test(row.request_id) ? `row-${index + 1}` : row.request_id
+      }));
+      setBatchRows(normalizedRows);
       setBatchImportSummary(imported.summary);
       setBatchImportColumns(imported.columns);
       setBatchResults([]);
+      setExpandedResults(new Set());
       setPage(1);
       setProgress(0);
     } catch (err) {
@@ -245,6 +251,7 @@ export default function App() {
     setError("");
     setProgress(0);
     setBatchResults([]);
+    setExpandedResults(new Set());
     setPage(1);
     try {
       const chunks = chunkItems(batchRows, BATCH_CHUNK_SIZE);
@@ -271,7 +278,7 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "stopslovo-results.csv";
+    link.download = "проверка-результаты.csv";
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -280,14 +287,28 @@ export default function App() {
     exportResultsXlsx(sortedResults, batchRows);
   };
 
+  const toggleResult = (requestId) => {
+    setExpandedResults((current) => {
+      const next = new Set(current);
+      if (next.has(requestId)) {
+        next.delete(requestId);
+      } else {
+        next.add(requestId);
+      }
+      return next;
+    });
+  };
+
   return (
     <div className={dark ? "dark" : ""}>
       <main className="min-h-screen bg-[#f5f5f2] text-[#1a1a18] transition-colors dark:bg-[#121512] dark:text-[#f4f4ee]">
         <header className="site-header">
           <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5">
             <div>
-              <p className="eyebrow mb-2 text-[#4a7c10] dark:text-[#a8d86f]">compliance scanner</p>
-              <h1 className="font-logo text-[38px] font-bold italic leading-none tracking-normal text-[#1a1a18] dark:text-[#f4f4ee]">StopSlovo</h1>
+              <div className="flex items-center gap-3">
+                <img src="/logo.svg" alt="СтопСлово" className="h-8 dark:hidden" />
+                <img src="/logo-dark.svg" alt="СтопСлово" className="hidden h-8 dark:block" />
+              </div>
               <p className="mt-2 text-sm font-medium text-[#7a7a70] dark:text-[#b8b8ad]">Автоматическая оценка риска для рекламных текстов</p>
             </div>
             <div className="flex items-center gap-3">
@@ -307,7 +328,7 @@ export default function App() {
               <Search className="h-4 w-4" /> Один текст
             </button>
             <button className={mode === "batch" ? "active" : ""} onClick={() => setMode("batch")}>
-              <FileText className="h-4 w-4" /> Batch файл
+              <FileText className="h-4 w-4" /> Загрузить файл
             </button>
           </div>
 
@@ -377,7 +398,7 @@ export default function App() {
               </div>
               {error && <div className="error-box">{error}</div>}
               {batchResults.length > 0 && (
-                <div className="panel overflow-x-auto">
+                <div className="panel">
                   <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                     <div className="text-sm text-slate-600 dark:text-slate-300">
                       Показано {visibleResults.length} из {sortedResults.length}. Страница {currentPage} из {totalPages}.
@@ -399,31 +420,73 @@ export default function App() {
                       <button className="secondary-button" disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Назад</button>
                       <button className="secondary-button" disabled={currentPage >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Вперед</button>
                     </div>
-                    <button className="primary-button" onClick={exportXlsx}><Download className="h-4 w-4" /> XLSX</button>
-                    <button className="secondary-button" onClick={exportCsv}><Download className="h-4 w-4" /> CSV</button>
+                    <button className="primary-button" onClick={exportXlsx}><Download className="h-4 w-4" /> Скачать XLSX</button>
+                    <button className="secondary-button" onClick={exportCsv}><Download className="h-4 w-4" /> Скачать CSV</button>
                   </div>
-                  <table className="w-full min-w-[760px] text-left text-sm">
-                    <thead className="text-slate-500 dark:text-slate-400">
-                      <tr>
-                        <th className="py-2 pr-3">ID</th>
-                        <th className="py-2 pr-3">Риск</th>
-                        <th className="py-2 pr-3">Замечаний</th>
-                        <th className="py-2 pr-3">Ручная проверка</th>
-                        <th className="py-2 pr-3">Резюме</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {visibleResults.map((item) => (
-                        <tr key={item.request_id} className="border-t border-slate-200 dark:border-slate-800">
-                          <td className="py-3 pr-3">{item.request_id}</td>
-                          <td className="py-3 pr-3"><RiskBadge risk={item.overall_risk} /></td>
-                          <td className="py-3 pr-3">{item.issues.length}</td>
-                          <td className="py-3 pr-3">{item.manual_review_required ? "Да" : "Нет"}</td>
-                          <td className="py-3 pr-3 text-slate-600 dark:text-slate-300">{item.summary}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <div className="grid gap-3">
+                    {visibleResults.map((item) => {
+                      const expanded = expandedResults.has(item.request_id);
+                      return (
+                        <article
+                          key={item.request_id}
+                          className="cursor-pointer rounded-[10px] border border-[#e0e0da] bg-white transition hover:border-[#c8c8c0] dark:border-[#30372f] dark:bg-[#181d18] dark:hover:border-[#3a453b]"
+                          onClick={() => toggleResult(item.request_id)}
+                        >
+                          <div className="p-4">
+                            <div className="flex flex-wrap items-center gap-3">
+                              <strong className="font-mono text-sm text-[#1a1a18] dark:text-[#f4f4ee]">{item.request_id}</strong>
+                              <RiskBadge risk={item.overall_risk} />
+                              <span className="rounded-full border border-[#e0e0da] px-2.5 py-1 text-xs font-semibold text-[#7a7a70] dark:border-[#30372f] dark:text-[#b8b8ad]">
+                                {item.issues.length} замечаний
+                              </span>
+                              <span className="ml-auto text-lg text-[#7a7a70] dark:text-[#b8b8ad]">{expanded ? "▲" : "▼"}</span>
+                            </div>
+                            <p className="mt-2 line-clamp-2 text-sm text-slate-700 dark:text-slate-200">
+                              {item.original_text.slice(0, 160)}{item.original_text.length > 160 ? "..." : ""}
+                            </p>
+                          </div>
+                          <div className={`overflow-hidden border-t border-[#e0e0da] transition-all duration-200 dark:border-[#30372f] ${expanded ? "max-h-[1200px] opacity-100" : "max-h-0 opacity-0"}`}>
+                            <div className="space-y-4 p-4">
+                              <div>
+                                <p className="eyebrow mb-2">текст</p>
+                                <HighlightedText text={item.original_text} issues={item.issues} />
+                              </div>
+                              <div>
+                                <p className="eyebrow mb-2">замечания</p>
+                                {item.issues.length === 0 ? (
+                                  <p className="text-sm text-slate-600 dark:text-slate-300">Замечаний не найдено.</p>
+                                ) : (
+                                  <div className="grid gap-2">
+                                    {item.issues.map((issue, index) => (
+                                      <div key={`${item.request_id}-${issue.term}-${index}`} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <strong>{issue.term}</strong>
+                                          <RiskBadge risk={issue.risk} />
+                                          {issue.replacements.length > 0 && (
+                                            <span className="text-slate-600 dark:text-slate-300">→ замены: {issue.replacements.join(", ")}</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              <div>
+                                <p className="eyebrow mb-2">резюме</p>
+                                <p className="text-sm text-slate-700 dark:text-slate-200">{item.summary}</p>
+                              </div>
+                              {item.manual_review_required && (
+                                <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100">
+                                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                                  <span>{item.manual_review_reason || "Требуется ручная проверка"}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </section>
@@ -433,3 +496,4 @@ export default function App() {
     </div>
   );
 }
+
