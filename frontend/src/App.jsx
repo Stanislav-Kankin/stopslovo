@@ -554,10 +554,9 @@ export default function App() {
               <Link className="secondary-button hidden sm:inline-flex" to="/">На главную</Link>
               <Link className="secondary-button hidden sm:inline-flex" to="/pricing">Тарифы</Link>
               {user?.email === "admin@admin.ru" && <Link className="secondary-button hidden sm:inline-flex" to="/admin">Админка</Link>}
-              {user && <QuotaWidget user={user} />}
               {user ? (
                 <div className="flex items-center gap-2">
-                  <span className="hidden max-w-[220px] truncate text-sm text-[#7a7a70] dark:text-[#c1d0cc] md:inline">{user.email}</span>
+                  <span className="hidden max-w-[180px] truncate rounded-full border border-[#e0e0da] px-3 py-1.5 text-xs font-medium text-[#7a7a70] dark:border-[#496574] dark:text-[#c1d0cc] lg:inline">{user.email}</span>
                   <button className="secondary-button" onClick={logout}><LogOut className="h-4 w-4" /> Выйти</button>
                 </div>
               ) : (
@@ -569,6 +568,7 @@ export default function App() {
             </div>
           </div>
         </header>
+        {user && <QuotaWidget user={user} />}
 
         <div className="mx-auto w-full max-w-6xl flex-1 space-y-6 px-4 py-8">
           <Routes>
