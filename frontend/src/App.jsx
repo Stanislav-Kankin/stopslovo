@@ -1,7 +1,8 @@
 import { AlertTriangle, Check, Clipboard, Download, FileText, Moon, Search, Sun } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { parseCsv, toCsv } from "./utils/csv";
+import { toCsv } from "./utils/csv";
+import { importRowsFromFile } from "./utils/importRows";
 
 const contextOptions = [
   ["реклама", "Рекламное объявление"],
@@ -143,6 +144,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [batchRows, setBatchRows] = useState([]);
   const [batchResults, setBatchResults] = useState([]);
+  const [batchImportSummary, setBatchImportSummary] = useState("");
+  const [batchImportColumns, setBatchImportColumns] = useState([]);
   const [progress, setProgress] = useState(0);
   const [sortDesc, setSortDesc] = useState(true);
 
@@ -163,17 +166,23 @@ export default function App() {
     }
   };
 
-  const loadCsv = async (event) => {
+  const loadBatchFile = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    const parsed = parseCsv(await file.text()).map((row, index) => ({
-      request_id: row.id || `row-${index + 1}`,
-      text: row.text,
-      context_type: row.context_type || "сайт"
-    }));
-    setBatchRows(parsed);
-    setBatchResults([]);
-    setProgress(0);
+    setError("");
+    try {
+      const imported = await importRowsFromFile(file);
+      setBatchRows(imported.rows);
+      setBatchImportSummary(imported.summary);
+      setBatchImportColumns(imported.columns);
+      setBatchResults([]);
+      setProgress(0);
+    } catch (err) {
+      setBatchRows([]);
+      setBatchImportSummary("");
+      setBatchImportColumns([]);
+      setError(`Не удалось импортировать файл: ${err.message}`);
+    }
   };
 
   const checkBatch = async () => {
@@ -228,7 +237,7 @@ export default function App() {
               <Search className="h-4 w-4" /> Один текст
             </button>
             <button className={mode === "batch" ? "active" : ""} onClick={() => setMode("batch")}>
-              <FileText className="h-4 w-4" /> Batch CSV
+              <FileText className="h-4 w-4" /> Batch файл
             </button>
           </div>
 
@@ -257,11 +266,40 @@ export default function App() {
             <section className="space-y-5">
               <div className="panel">
                 <div className="flex flex-wrap items-center justify-between gap-4">
-                  <input className="input max-w-lg" type="file" accept=".csv,text/csv" onChange={loadCsv} />
+                  <input className="input max-w-lg" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={loadBatchFile} />
                   <button className="primary-button" disabled={loading || batchRows.length === 0} onClick={checkBatch}>
                     {loading ? "Обрабатываем..." : `Проверить ${batchRows.length || ""}`}
                   </button>
                 </div>
+                <div className="mt-4 rounded-md border border-sky-100 bg-sky-50 px-3 py-2 text-sm text-slate-700 dark:border-sky-900/60 dark:bg-slate-950/40 dark:text-sky-100">
+                  Загрузите Excel или CSV из рекламного кабинета. Подойдут колонки с заголовками, описаниями, подзаголовками, быстрыми ссылками и уточнениями.
+                </div>
+                {batchImportSummary && (
+                  <div className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100">
+                    {batchImportSummary}
+                  </div>
+                )}
+                {batchRows.length > 0 && (
+                  <div className="mt-4 overflow-hidden rounded-md border border-slate-200 dark:border-slate-800">
+                    <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                      Предпросмотр импорта
+                    </div>
+                    <div className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {batchRows.slice(0, 3).map((row) => (
+                        <div key={row.request_id} className="grid gap-1 px-3 py-2 text-sm md:grid-cols-[120px_140px_1fr]">
+                          <span className="font-medium text-slate-500 dark:text-slate-400">{row.request_id}</span>
+                          <span className="text-slate-600 dark:text-slate-300">{row.context_type}</span>
+                          <span className="line-clamp-2 text-slate-800 dark:text-slate-100">{row.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {batchImportColumns.length > 0 && (
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    Колонки для анализа: {batchImportColumns.join(", ")}
+                  </p>
+                )}
                 <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
                   <div className="h-full bg-accent-light transition-all dark:bg-accent-dark" style={{ width: `${progress}%` }} />
                 </div>
