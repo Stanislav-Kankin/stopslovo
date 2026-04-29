@@ -11,12 +11,20 @@ class DictionaryChecker:
         self.version = raw["version"]
         self.entries = raw["entries"]
         self.by_normalized = {entry["normalized"].lower().replace("ё", "е"): entry for entry in self.entries}
+        registered_path = self.dictionary_path.with_name("registered_names.json")
+        if registered_path.exists():
+            registered = json.loads(registered_path.read_text(encoding="utf-8"))
+            self.registered_names = {item.lower().replace("ё", "е") for item in registered.get("names", [])}
+        else:
+            self.registered_names = set()
 
     def check(self, tokens: list[dict], latin_matches: list[dict], normalizer, context_type: str) -> list[dict]:
         found: dict[tuple[str, int | None], dict] = {}
 
         for match in latin_matches:
             normalized = match["term"].lower()
+            if normalized in self.registered_names:
+                continue
             entry = self.by_normalized.get(normalized)
             if entry:
                 found[(match["term"].lower(), match["start"])] = self._issue(match, entry, context_type)
@@ -37,17 +45,42 @@ class DictionaryChecker:
                 }
 
         for token in tokens:
-            normalized = normalizer.normalize(token["term"])
-            entry = self.by_normalized.get(normalized)
-            if not entry or entry["risk_base"] == "safe":
+            if not self._has_cyrillic(token["term"]):
                 continue
-            found[(token["term"].lower(), token["start"])] = self._issue(
-                {**token, "normalized": normalized},
-                entry,
-                context_type,
-            )
+            normalized = normalizer.normalize(token["term"])
+            if normalized in self.registered_names:
+                continue
+            entry = self.by_normalized.get(normalized)
+            if entry and entry["risk_base"] == "safe":
+                continue
+            if entry:
+                found[(token["term"].lower(), token["start"])] = self._issue(
+                    {**token, "normalized": normalized},
+                    entry,
+                    context_type,
+                )
+                continue
+            if normalizer.is_known(token["term"]):
+                continue
+            found[(token["term"].lower(), token["start"])] = {
+                "term": token["term"],
+                "normalized": normalized,
+                "script": "cyrillic_borrowing",
+                "category": "missed_by_dictionary",
+                "risk": apply_context_modifier("medium", context_type),
+                "risk_base": apply_context_modifier("medium", context_type),
+                "reason": "Слово не найдено в нормативной морфологии и белом списке; нужен контекстный разбор, не является ли оно брендом, опечаткой или заимствованием.",
+                "replacements": [],
+                "keep_as_is": True,
+                "start": token.get("start"),
+                "end": token.get("end"),
+            }
 
         return list(found.values())
+
+    @staticmethod
+    def _has_cyrillic(value: str) -> bool:
+        return any("а" <= char.lower() <= "я" or char.lower() == "ё" for char in value)
 
     def _issue(self, token: dict, entry: dict, context_type: str) -> dict:
         risk = apply_context_modifier(entry["risk_base"], context_type)

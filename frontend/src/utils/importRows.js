@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+import XLSX from "xlsx-js-style";
 
 const CONTEXT_TYPES = new Set([
   "реклама",
@@ -12,35 +12,32 @@ const CONTEXT_TYPES = new Set([
 
 const ID_COLUMNS = ["id", "ид", "номер", "объявление", "ad id", "ad_id"];
 const CONTEXT_COLUMNS = ["context_type", "контекст", "тип контента", "тип_контента"];
-const TEXT_COLUMN_HINTS = [
-  "text",
-  "текст",
-  "заголовок",
-  "подзаголовок",
-  "описание",
-  "объявление",
-  "предложение",
-  "текстовый блок",
-  "текстовых блоков",
-  "быстрая ссылка",
-  "быстрые ссылки",
-  "уточнение",
-  "уточнения",
-  "название",
-  "промо",
-  "offer",
-  "ссылка",
-  "quick link",
-  "sitelink",
-  "callout",
-  "headline",
-  "description",
-  "title"
+const DIRECT_TEXT_PATTERNS = [
+  /^заголовок\s*1$/i,
+  /^заголовок\s*2$/i,
+  /^заголовок\s*[1-7]$/i,
+  /^текст$/i,
+  /^текст\s*[1-7]$/i,
+  /^текст объявления$/i,
+  /^заголовки быстрых ссылок$/i,
+  /^описания быстрых ссылок$/i,
+  /^уточнения$/i,
+  /^headline\s*1$/i,
+  /^headline\s*2$/i,
+  /^description$/i,
+  /^sitelink/i,
+  /^quick link/i,
+  /^callout/i
 ];
+const TEXT_COLUMN_HINTS = ["text", "текст", "заголовок", "описание", "быстрая ссылка", "быстрые ссылки", "уточнение", "уточнения", "headline", "description", "sitelink", "quick link", "callout"];
 const SKIP_COLUMN_HINTS = [
   "url",
   "href",
   "utm",
+  "фраз",
+  "минус",
+  "ключев",
+  "поисков",
   "ставка",
   "бюджет",
   "показы",
@@ -50,12 +47,19 @@ const SKIP_COLUMN_HINTS = [
   "расход",
   "конверс",
   "статус",
-  "дата"
+  "дата",
+  "название кампании",
+  "название группы",
+  "кампания",
+  "группа",
+  "ссылка",
+  "отображаемая ссылка",
+  "трекинговая ссылка"
 ];
 const EMPTY_VALUES = new Set(["", "-", "—", "–", "нет", "n/a", "none", "null"]);
 
 function normalizeHeader(value) {
-  return String(value || "").trim().toLowerCase().replaceAll("ё", "е");
+  return String(value || "").trim().toLowerCase().replaceAll("ё", "е").replace(/_\d+$/, "");
 }
 
 function isContext(value) {
@@ -72,7 +76,8 @@ function isTextColumn(header) {
   if (CONTEXT_COLUMNS.some((item) => normalized === normalizeHeader(item))) return false;
   if (ID_COLUMNS.some((item) => normalized === normalizeHeader(item))) return false;
   if (SKIP_COLUMN_HINTS.some((hint) => normalized.includes(normalizeHeader(hint)))) return false;
-  return TEXT_COLUMN_HINTS.some((hint) => normalized.includes(normalizeHeader(hint)));
+  if (DIRECT_TEXT_PATTERNS.some((pattern) => pattern.test(normalized))) return true;
+  return TEXT_COLUMN_HINTS.some((hint) => normalized === normalizeHeader(hint));
 }
 
 function cleanCell(value) {
@@ -88,6 +93,7 @@ function isMeaningfulText(value) {
 function rowToText(row, textColumns) {
   return textColumns
     .map((column) => cleanCell(row[column]))
+    .flatMap((value) => value.split("||").map(cleanCell))
     .filter(isMeaningfulText)
     .filter((value, index, values) => values.indexOf(value) === index)
     .join(". ");
@@ -183,7 +189,8 @@ function normalizeRows(rawRows) {
       return {
         request_id: String((idColumn && row[idColumn]) || `row-${index + 1}`),
         text,
-        context_type: isContext(contextValue) ? String(contextValue).trim() : "реклама"
+        context_type: isContext(contextValue) ? String(contextValue).trim() : "реклама",
+        source: row
       };
     })
     .filter((row) => isMeaningfulText(row.text));

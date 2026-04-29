@@ -277,7 +277,7 @@ export default function App() {
   };
 
   const exportXlsx = () => {
-    exportResultsXlsx(sortedResults);
+    exportResultsXlsx(sortedResults, batchRows);
   };
 
   return (

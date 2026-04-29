@@ -36,3 +36,16 @@ def test_clean_text_is_safe() -> None:
     assert data["overall_risk"] == "safe"
     assert data["issues"] == []
     assert data["rewritten_text"] == "Скидки на товары для дома"
+
+
+def test_urls_and_registered_names_are_not_flagged() -> None:
+    response = client.post(
+        "/api/v1/check/text",
+        json={"text": "Кейс Adbeam: https://adbeam.ru и рост продаж", "context_type": "реклама", "use_llm": False},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    terms = {issue["term"].lower() for issue in data["issues"]}
+    assert "https" not in terms
+    assert "adbeam" not in terms
+    assert "ru" not in terms
