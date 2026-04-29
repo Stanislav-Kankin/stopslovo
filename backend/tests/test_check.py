@@ -49,3 +49,21 @@ def test_urls_and_registered_names_are_not_flagged() -> None:
     assert "https" not in terms
     assert "adbeam" not in terms
     assert "ru" not in terms
+
+
+def test_user_excluded_phrase_is_not_flagged() -> None:
+    response = client.post(
+        "/api/v1/check/text",
+        json={
+            "text": "Grand Line sale",
+            "context_type": "СЂРµРєР»Р°РјР°",
+            "use_llm": False,
+            "excluded_terms": ["Grand Line"],
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    terms = {issue["term"].lower() for issue in data["issues"]}
+    assert "grand" not in terms
+    assert "line" not in terms
+    assert "sale" in terms

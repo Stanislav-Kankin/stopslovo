@@ -21,6 +21,7 @@ class CheckTextRequest(BaseModel):
     context_type: ContextType
     request_id: str | None = None
     use_llm: bool = True
+    excluded_terms: list[str] = Field(default_factory=list, max_length=200)
 
 
 class CheckBatchRequest(BaseModel):

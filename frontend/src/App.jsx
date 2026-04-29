@@ -58,6 +58,13 @@ function chunkItems(items, size) {
   return chunks;
 }
 
+function parseExcludedTerms(value) {
+  return value
+    .split(/[\n,;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function RiskBadge({ risk }) {
   return <span className={`badge border ${riskClass[risk] || riskClass.safe}`}>{riskLabels[risk] || risk}</span>;
 }
@@ -188,6 +195,7 @@ export default function App() {
   const [mode, setMode] = useState("single");
   const [text, setText] = useState("Big sale и кешбэк на premium товары только сегодня");
   const [contextType, setContextType] = useState("реклама");
+  const [excludedTermsText, setExcludedTermsText] = useState("WB\nOzon");
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -208,12 +216,13 @@ export default function App() {
   const totalPages = Math.max(1, Math.ceil(sortedResults.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const visibleResults = sortedResults.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const excludedTerms = useMemo(() => parseExcludedTerms(excludedTermsText), [excludedTermsText]);
 
   const checkSingle = async () => {
     setLoading(true);
     setError("");
     try {
-      setResult(await postJson("/api/v1/check/text", { text, context_type: contextType }));
+      setResult(await postJson("/api/v1/check/text", { text, context_type: contextType, excluded_terms: excludedTerms }));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -258,7 +267,7 @@ export default function App() {
       const collected = [];
       for (let index = 0; index < chunks.length; index += 1) {
         const data = await postJson("/api/v1/check/batch", {
-          items: chunks[index].map((item) => ({ ...item, use_llm: false }))
+          items: chunks[index].map((item) => ({ ...item, use_llm: false, excluded_terms: excludedTerms }))
         });
         collected.push(...data.items);
         setBatchResults([...collected]);
@@ -331,6 +340,37 @@ export default function App() {
               <FileText className="h-4 w-4" /> Загрузить файл
             </button>
           </div>
+
+          <section className="panel">
+            <div className="grid gap-3 lg:grid-cols-[220px_1fr] lg:items-start">
+              <div>
+                <p className="eyebrow">исключения</p>
+                <h2 className="section-title">Товарные знаки</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Слова и словосочетания из этого списка не будут считаться нарушениями.
+                </p>
+              </div>
+              <div className="grid gap-2">
+                <textarea
+                  className="input min-h-[86px] resize-y"
+                  value={excludedTermsText}
+                  onChange={(event) => setExcludedTermsText(event.target.value)}
+                  placeholder="Например: WB, Ozon, Grand Line"
+                />
+                <div className="flex flex-wrap gap-2">
+                  {excludedTerms.length > 0 ? (
+                    excludedTerms.map((term) => (
+                      <span key={term} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
+                        {term}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-500 dark:text-slate-400">Список пуст. Проверка будет идти без пользовательских исключений.</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
 
           {mode === "single" ? (
             <>
