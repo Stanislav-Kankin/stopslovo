@@ -61,21 +61,20 @@ cp .env.production.example .env
 
 ```env
 DEEPSEEK_API_KEY=...
-SERVER_NAME=dev-cloud-ksa.ru
-SSL_CERT_PATH=/etc/letsencrypt/live/dev-cloud-ksa.ru/fullchain.pem
-SSL_KEY_PATH=/etc/letsencrypt/live/dev-cloud-ksa.ru/privkey.pem
+SERVER_NAME=stopslovo.dev-cloud-ksa.ru
+SSL_CERT_PATH=/etc/letsencrypt/live/stopslovo.dev-cloud-ksa.ru/fullchain.pem
+SSL_KEY_PATH=/etc/letsencrypt/live/stopslovo.dev-cloud-ksa.ru/privkey.pem
 ```
 
 4. Проверьте, что DNS домена указывает на VPS, а порты `80` и `443` открыты.
 
-Для текущего сервера нужны A-записи:
+Если основной домен уже занят другим проектом, используйте отдельный поддомен. Для текущего VPS нужна A-запись:
 
 ```text
-@    A    185.184.78.20
-www  A    185.184.78.20
+stopslovo    A    185.184.78.20
 ```
 
-На скриншоте DNS сейчас указывает на `94.141.161.148`, поэтому сайт не попадет на новый VPS, пока записи не заменить на `185.184.78.20`.
+Корневой домен `dev-cloud-ksa.ru` и `www.dev-cloud-ksa.ru` можно оставить на старом IP.
 5. Запустите:
 
 ```bash
@@ -91,8 +90,8 @@ Production compose поднимает:
 
 ```bash
 docker compose ps
-curl -I https://dev-cloud-ksa.ru/healthz
-curl https://dev-cloud-ksa.ru/health
+curl -I https://stopslovo.dev-cloud-ksa.ru/healthz
+curl https://stopslovo.dev-cloud-ksa.ru/health
 ```
 
 Логи:
@@ -124,7 +123,7 @@ site-1,"Скидки на товары для дома",сайт
 ## API пример
 
 ```bash
-curl -X POST "https://dev-cloud-ksa.ru/api/v1/check/text" \
+curl -X POST "https://stopslovo.dev-cloud-ksa.ru/api/v1/check/text" \
   -H "Content-Type: application/json" \
   -d '{"text":"Big sale и кешбэк на premium товары","context_type":"реклама"}'
 ```

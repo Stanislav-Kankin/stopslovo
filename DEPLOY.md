@@ -1,26 +1,53 @@
-# Деплой на dev-cloud-ksa.ru
+# Деплой на stopslovo.dev-cloud-ksa.ru
 
 ## DNS
 
-В панели DNS замените старые A-записи на IP нового VPS:
+Корневой домен `dev-cloud-ksa.ru` и `www.dev-cloud-ksa.ru` не трогаем, потому что там уже работает другой проект.
+
+В DNS-зоне добавьте новую A-запись:
 
 ```text
-@    A    185.184.78.20
-www  A    185.184.78.20
+stopslovo    A    185.184.78.20
 ```
 
-Сейчас на скриншоте домен указывает на `94.141.161.148`, поэтому перед запуском HTTPS надо дождаться обновления DNS.
-
-Проверка на сервере или локально:
+Проверка после обновления DNS:
 
 ```bash
-dig +short dev-cloud-ksa.ru
-dig +short www.dev-cloud-ksa.ru
+dig +short stopslovo.dev-cloud-ksa.ru
 ```
 
-Обе команды должны вернуть `185.184.78.20`.
+Команда должна вернуть:
 
-## Запуск на VPS
+```text
+185.184.78.20
+```
+
+## SSL
+
+Если у вас уже есть wildcard-сертификат `*.dev-cloud-ksa.ru`, можно указать его реальные пути в `.env`.
+
+Если сертификата для поддомена еще нет, после обновления DNS выпустите его на VPS:
+
+```bash
+apt update
+apt install -y certbot
+certbot certonly --standalone -d stopslovo.dev-cloud-ksa.ru
+```
+
+На время выпуска сертификата порт `80` должен быть свободен. Если Docker уже запущен и занял порт, остановите его:
+
+```bash
+docker compose down
+```
+
+Стандартные пути Let's Encrypt:
+
+```text
+/etc/letsencrypt/live/stopslovo.dev-cloud-ksa.ru/fullchain.pem
+/etc/letsencrypt/live/stopslovo.dev-cloud-ksa.ru/privkey.pem
+```
+
+## .env на VPS
 
 ```bash
 cd ~/stopslovo
@@ -36,14 +63,14 @@ DEEPSEEK_API_KEY=your_deepseek_key
 DEEPSEEK_MODEL=deepseek-chat
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 
-SERVER_NAME=dev-cloud-ksa.ru
+SERVER_NAME=stopslovo.dev-cloud-ksa.ru
 HTTP_PORT=80
 HTTPS_PORT=443
-SSL_CERT_PATH=/etc/letsencrypt/live/dev-cloud-ksa.ru/fullchain.pem
-SSL_KEY_PATH=/etc/letsencrypt/live/dev-cloud-ksa.ru/privkey.pem
+SSL_CERT_PATH=/etc/letsencrypt/live/stopslovo.dev-cloud-ksa.ru/fullchain.pem
+SSL_KEY_PATH=/etc/letsencrypt/live/stopslovo.dev-cloud-ksa.ru/privkey.pem
 ```
 
-Запуск:
+## Запуск
 
 ```bash
 docker compose up -d --build
@@ -53,8 +80,8 @@ docker compose ps
 Проверка:
 
 ```bash
-curl -I https://dev-cloud-ksa.ru/healthz
-curl https://dev-cloud-ksa.ru/health
+curl -I https://stopslovo.dev-cloud-ksa.ru/healthz
+curl https://stopslovo.dev-cloud-ksa.ru/health
 ```
 
 Логи:
