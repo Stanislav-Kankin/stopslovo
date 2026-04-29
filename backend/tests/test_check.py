@@ -14,7 +14,7 @@ def test_health() -> None:
 def test_check_text_flags_high_risk_ad() -> None:
     response = client.post(
         "/api/v1/check/text",
-        json={"text": "Big sale и кешбэк для клиентов", "context_type": "реклама"},
+        json={"text": "Big sale и кешбэк для клиентов", "context_type": "реклама", "use_llm": False},
     )
     assert response.status_code == 200
     data = response.json()
@@ -26,10 +26,19 @@ def test_check_text_flags_high_risk_ad() -> None:
     assert "Это автоматическая оценка риска, не юридическое заключение." in data["summary"]
 
 
+def test_context_type_is_optional() -> None:
+    response = client.post(
+        "/api/v1/check/text",
+        json={"text": "sale", "use_llm": False},
+    )
+    assert response.status_code == 200
+    assert response.json()["overall_risk"] == "high"
+
+
 def test_clean_text_is_safe() -> None:
     response = client.post(
         "/api/v1/check/text",
-        json={"text": "Скидки на товары для дома", "context_type": "сайт"},
+        json={"text": "Скидки на товары для дома", "context_type": "сайт", "use_llm": False},
     )
     assert response.status_code == 200
     data = response.json()
@@ -56,7 +65,7 @@ def test_user_excluded_phrase_is_not_flagged() -> None:
         "/api/v1/check/text",
         json={
             "text": "Grand Line sale",
-            "context_type": "СЂРµРєР»Р°РјР°",
+            "context_type": "реклама",
             "use_llm": False,
             "excluded_terms": ["Grand Line"],
         },

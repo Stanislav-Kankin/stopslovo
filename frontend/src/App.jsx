@@ -1,21 +1,20 @@
-﻿import { AlertTriangle, Check, Clipboard, Download, FileText, Moon, Search, Sun } from "lucide-react";
-import { useMemo, useState } from "react";
+import { AlertTriangle, Check, Clipboard, FileText, LogIn, LogOut, Moon, Search, Sun } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Link, Route, Routes } from "react-router-dom";
 
+import { BatchSummary } from "./components/BatchSummary";
+import { Footer } from "./components/Footer";
+import { QuotaWidget } from "./components/QuotaWidget";
+import { Login } from "./pages/Login";
+import { Pricing } from "./pages/Pricing";
+import { Register } from "./pages/Register";
+import { Terms } from "./pages/Terms";
 import { toCsv } from "./utils/csv";
 import { exportResultsXlsx } from "./utils/exportResults";
 import { importRowsFromFile } from "./utils/importRows";
 
 const BATCH_CHUNK_SIZE = 100;
-
-const contextOptions = [
-  ["реклама", "Рекламное объявление"],
-  ["карточка_товара", "Карточка товара"],
-  ["баннер", "Баннер / визуал"],
-  ["упаковка", "Упаковка продукта"],
-  ["сайт", "Текст на сайте"],
-  ["презентация", "Презентация"],
-  ["b2b_документ", "B2B документ"]
-];
+const DEFAULT_CONTEXT = "реклама";
 
 const riskLabels = {
   high: "Высокий",
@@ -44,17 +43,37 @@ function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+async function parseResponse(response) {
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = null;
+  }
+  if (!response.ok) {
+    const detail = data?.detail || data;
+    const message = detail?.message || detail?.detail || text || "Ошибка запроса";
+    const error = new Error(message);
+    error.payload = detail;
+    throw error;
+  }
+  return data;
+}
+
 async function postJson(url, body) {
   const response = await fetch(url, {
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body)
   });
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || "Ошибка запроса");
-  }
-  return response.json();
+  return parseResponse(response);
+}
+
+async function getJson(url) {
+  const response = await fetch(url, { credentials: "include" });
+  return parseResponse(response);
 }
 
 function chunkItems(items, size) {
@@ -114,9 +133,7 @@ function HighlightedRewrite({ text, issues }) {
     .filter(Boolean)
     .sort((a, b) => b.length - a.length);
 
-  if (!replacements.length) {
-    return <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">{text}</p>;
-  }
+  if (!replacements.length) return <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">{text}</p>;
 
   const pattern = new RegExp(`(${replacements.map(escapeRegex).join("|")})`, "gi");
   return (
@@ -124,11 +141,7 @@ function HighlightedRewrite({ text, issues }) {
       {text.split(pattern).map((part, index) => {
         const changed = replacements.some((item) => item.toLowerCase() === part.toLowerCase());
         if (!changed) return <span key={`${part}-${index}`}>{part}</span>;
-        return (
-          <mark key={`${part}-${index}`} className="rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-900 ring-1 ring-emerald-200 dark:bg-emerald-950 dark:text-emerald-100 dark:ring-emerald-800">
-            {part}
-          </mark>
-        );
+        return <mark key={`${part}-${index}`} className="rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-900 ring-1 ring-emerald-200 dark:bg-emerald-950 dark:text-emerald-100 dark:ring-emerald-800">{part}</mark>;
       })}
     </p>
   );
@@ -193,9 +206,7 @@ function ResultView({ result }) {
                   <span className="text-sm text-slate-500 dark:text-slate-400">{issue.normalized}</span>
                 </div>
                 <p className="text-sm text-slate-600 dark:text-slate-300">{issue.reason}</p>
-                {issue.replacements.length > 0 && (
-                  <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">Замены: {issue.replacements.join(", ")}</p>
-                )}
+                {issue.replacements.length > 0 && <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">Замены: {issue.replacements.join(", ")}</p>}
               </article>
             ))}
           </div>
@@ -206,16 +217,18 @@ function ResultView({ result }) {
         <p className="eyebrow">резюме</p>
         <h2 className="section-title">Краткое резюме</h2>
         <p className="text-slate-700 dark:text-slate-200">{localizeSystemText(result.summary)}</p>
+        <div className="mt-4 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>Это автоматическая оценка риска, не юридическое заключение. Для спорных случаев обратитесь к юристу.</span>
+        </div>
       </div>
     </section>
   );
 }
 
-export default function App() {
-  const [dark, setDark] = useState(false);
+function HomePage({ refreshMe }) {
   const [mode, setMode] = useState("single");
   const [text, setText] = useState("Big sale и кешбэк на premium товары только сегодня");
-  const [contextType, setContextType] = useState("реклама");
   const [excludedTermsText, setExcludedTermsText] = useState("");
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
@@ -229,21 +242,27 @@ export default function App() {
   const [pageSize, setPageSize] = useState(20);
   const [page, setPage] = useState(1);
   const [expandedResults, setExpandedResults] = useState(new Set());
+  const [selectedTerm, setSelectedTerm] = useState("");
 
+  const excludedTerms = useMemo(() => parseExcludedTerms(excludedTermsText), [excludedTermsText]);
+  const filteredResults = useMemo(
+    () => selectedTerm ? batchResults.filter((item) => item.issues.some((issue) => (issue.normalized || issue.term.toLowerCase()) === selectedTerm)) : batchResults,
+    [batchResults, selectedTerm]
+  );
   const sortedResults = useMemo(
-    () => [...batchResults].sort((a, b) => (sortDesc ? riskWeight[b.overall_risk] - riskWeight[a.overall_risk] : riskWeight[a.overall_risk] - riskWeight[b.overall_risk])),
-    [batchResults, sortDesc]
+    () => [...filteredResults].sort((a, b) => (sortDesc ? riskWeight[b.overall_risk] - riskWeight[a.overall_risk] : riskWeight[a.overall_risk] - riskWeight[b.overall_risk])),
+    [filteredResults, sortDesc]
   );
   const totalPages = Math.max(1, Math.ceil(sortedResults.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const visibleResults = sortedResults.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  const excludedTerms = useMemo(() => parseExcludedTerms(excludedTermsText), [excludedTermsText]);
 
   const checkSingle = async () => {
     setLoading(true);
     setError("");
     try {
-      setResult(await postJson("/api/v1/check/text", { text, context_type: contextType, excluded_terms: excludedTerms }));
+      setResult(await postJson("/api/v1/check/text", { text, context_type: DEFAULT_CONTEXT, excluded_terms: excludedTerms }));
+      await refreshMe();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -259,12 +278,14 @@ export default function App() {
       const imported = await importRowsFromFile(file);
       const normalizedRows = imported.rows.map((row, index) => ({
         ...row,
+        context_type: DEFAULT_CONTEXT,
         request_id: /^row-\d+$/.test(row.request_id) ? `row-${index + 1}` : row.request_id
       }));
       setBatchRows(normalizedRows);
       setBatchImportSummary(imported.summary);
       setBatchImportColumns(imported.columns);
       setBatchResults([]);
+      setSelectedTerm("");
       setExpandedResults(new Set());
       setPage(1);
       setProgress(0);
@@ -281,6 +302,7 @@ export default function App() {
     setError("");
     setProgress(0);
     setBatchResults([]);
+    setSelectedTerm("");
     setExpandedResults(new Set());
     setPage(1);
     try {
@@ -288,11 +310,12 @@ export default function App() {
       const collected = [];
       for (let index = 0; index < chunks.length; index += 1) {
         const data = await postJson("/api/v1/check/batch", {
-          items: chunks[index].map((item) => ({ ...item, use_llm: false, excluded_terms: excludedTerms }))
+          items: chunks[index].map((item) => ({ ...item, context_type: DEFAULT_CONTEXT, use_llm: false, excluded_terms: excludedTerms }))
         });
         collected.push(...data.items);
         setBatchResults([...collected]);
         setProgress(Math.round(((index + 1) / chunks.length) * 100));
+        await refreshMe();
       }
       setProgress(100);
     } catch (err) {
@@ -304,47 +327,239 @@ export default function App() {
   };
 
   const exportCsv = () => {
-    const blob = new Blob([toCsv(sortedResults)], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob([toCsv(batchResults)], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "проверка-результаты.csv";
+    link.download = "стопслово-результаты.csv";
     link.click();
     URL.revokeObjectURL(url);
   };
 
   const exportXlsx = () => {
-    exportResultsXlsx(sortedResults, batchRows);
+    exportResultsXlsx(batchResults, batchRows);
   };
 
   const toggleResult = (requestId) => {
     setExpandedResults((current) => {
       const next = new Set(current);
-      if (next.has(requestId)) {
-        next.delete(requestId);
-      } else {
-        next.add(requestId);
-      }
+      next.has(requestId) ? next.delete(requestId) : next.add(requestId);
       return next;
     });
   };
 
   return (
-    <div className={dark ? "dark" : ""}>
-      <main className="min-h-screen bg-[#f5f5f2] text-[#1a1a18] transition-colors dark:bg-[#17232d] dark:text-[#f4f7f2]">
-        <header className="site-header">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5">
-            <div>
-              <div className="flex items-center gap-3">
-                <img src="/logo.svg" alt="СтопСлово" className="h-8 dark:hidden" />
-                <img src="/logo-dark.svg" alt="СтопСлово" className="hidden h-8 dark:block" />
-              </div>
-              <p className="mt-2 text-sm font-medium text-[#7a7a70] dark:text-[#c1d0cc]">Автоматическая оценка риска для рекламных текстов</p>
+    <section className="space-y-6">
+      <div className="segmented">
+        <button className={mode === "single" ? "active" : ""} onClick={() => setMode("single")}>
+          <Search className="h-4 w-4" /> Один текст
+        </button>
+        <button className={mode === "batch" ? "active" : ""} onClick={() => setMode("batch")}>
+          <FileText className="h-4 w-4" /> Загрузить файл
+        </button>
+      </div>
+
+      <section className="panel">
+        <div className="grid gap-3 lg:grid-cols-[220px_1fr] lg:items-start">
+          <div>
+            <p className="eyebrow">исключения</p>
+            <h2 className="section-title">Белый список</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Слова и словосочетания из этого списка не будут попадать в замечания.</p>
+          </div>
+          <div className="grid gap-2">
+            <textarea className="input min-h-[86px] resize-y" value={excludedTermsText} onChange={(event) => setExcludedTermsText(event.target.value)} placeholder="Например, WB, Wildberries, Ozon, Nike, Apple" />
+            <div className="flex flex-wrap gap-2">
+              {excludedTerms.length > 0 ? excludedTerms.map((term) => (
+                <span key={term} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 dark:border-[#5aa978] dark:bg-[#203c34] dark:text-[#bdf2cf]">{term}</span>
+              )) : <span className="text-xs text-slate-500 dark:text-slate-400">Список пуст. Проверка будет идти без пользовательских исключений.</span>}
             </div>
-            <div className="flex items-center gap-3">
-              <span className="hidden rounded-full border border-[#c8c8c0] bg-[#f0f0ec] px-3 py-1.5 font-mono text-xs font-medium text-[#7a7a70] dark:border-[#496574] dark:bg-[#20313b] dark:text-[#c1d0cc] sm:inline-flex">
-                149-ФЗ · рекламные тексты
-              </span>
+          </div>
+        </div>
+      </section>
+
+      {mode === "single" ? (
+        <>
+          <section className="panel">
+            <div className="grid gap-4">
+              <textarea className="input min-h-[140px] resize-y" value={text} onChange={(event) => setText(event.target.value)} />
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="text-sm text-slate-500 dark:text-slate-400">{text.length} символов</span>
+                <button className="primary-button" disabled={loading || !text.trim()} onClick={checkSingle}>
+                  {loading ? "Проверяем..." : "Проверить"}
+                </button>
+              </div>
+            </div>
+          </section>
+          {error && <div className="error-box">{error}</div>}
+          <ResultView result={result} />
+        </>
+      ) : (
+        <section className="space-y-5">
+          <div className="panel">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <input className="input max-w-lg" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={loadBatchFile} />
+              <button className="primary-button" disabled={loading || batchRows.length === 0} onClick={checkBatch}>
+                {loading ? `Обрабатываем ${progress}%` : `Проверить ${batchRows.length || ""}`}
+              </button>
+            </div>
+            <div className="mt-4 rounded-md border border-sky-100 bg-sky-50 px-3 py-2 text-sm text-slate-700 dark:border-[#3d6880] dark:bg-[#1e3442] dark:text-[#d6eef8]">
+              Загрузите Excel или CSV из рекламного кабинета. Подойдут колонки с заголовками, описаниями, подзаголовками, быстрыми ссылками и уточнениями.
+            </div>
+            {batchImportSummary && (
+              <div className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-[#5aa978] dark:bg-[#203c34] dark:text-[#bdf2cf]">
+                {batchImportSummary}
+                <span className="block pt-1 text-xs opacity-80">Пакетная проверка работает в быстром словарном режиме без нейросетевого разбора. Для детального разбора используйте проверку одного текста.</span>
+              </div>
+            )}
+            {batchRows.length > 0 && (
+              <div className="mt-4 overflow-hidden rounded-md border border-slate-200 dark:border-[#38505c]">
+                <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-600 dark:border-[#38505c] dark:bg-[#1b2a34] dark:text-[#c7d5d1]">Предпросмотр импорта</div>
+                <div className="divide-y divide-slate-200 dark:divide-slate-800">
+                  {batchRows.slice(0, 3).map((row) => (
+                    <div key={row.request_id} className="grid gap-1 px-3 py-2 text-sm md:grid-cols-[120px_1fr]">
+                      <span className="font-medium text-slate-500 dark:text-slate-400">{row.request_id}</span>
+                      <span className="line-clamp-2 text-slate-800 dark:text-slate-100">{row.text}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {batchImportColumns.length > 0 && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Колонки для анализа: {batchImportColumns.join(", ")}</p>}
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-[#2c4050]">
+              <div className="h-full bg-accent-light transition-all dark:bg-accent-dark" style={{ width: `${progress}%` }} />
+            </div>
+          </div>
+
+          {error && <div className="error-box">{error}</div>}
+          <BatchSummary results={batchResults} selectedTerm={selectedTerm} onSelectTerm={(term) => { setSelectedTerm(term); setPage(1); }} onDownloadXlsx={exportXlsx} onDownloadCsv={exportCsv} />
+
+          {batchResults.length > 0 && (
+            <div className="panel">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="text-sm text-slate-600 dark:text-slate-300">Показано {visibleResults.length} из {sortedResults.length}. Страница {currentPage} из {totalPages}.</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select className="input h-10 w-28" value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }}>
+                    <option value={20}>20 строк</option>
+                    <option value={50}>50 строк</option>
+                    <option value={100}>100 строк</option>
+                  </select>
+                  <button className="secondary-button" onClick={() => setSortDesc((value) => !value)}>Сортировать по риску</button>
+                  <button className="secondary-button" disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Назад</button>
+                  <button className="secondary-button" disabled={currentPage >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Вперед</button>
+                </div>
+              </div>
+              <div className="grid gap-3">
+                {visibleResults.map((item) => {
+                  const expanded = expandedResults.has(item.request_id);
+                  return (
+                    <article key={item.request_id} className="cursor-pointer rounded-[10px] border border-[#e0e0da] bg-white transition hover:border-[#c8c8c0] dark:border-[#38505c] dark:bg-[#22313b] dark:hover:border-[#5d7b89]" onClick={() => toggleResult(item.request_id)}>
+                      <div className="p-4">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <strong className="font-mono text-sm text-[#1a1a18] dark:text-[#f4f7f2]">{item.request_id}</strong>
+                          <RiskBadge risk={item.overall_risk} />
+                          <span className="rounded-full border border-[#e0e0da] px-2.5 py-1 text-xs font-semibold text-[#7a7a70] dark:border-[#496574] dark:text-[#c1d0cc]">{item.issues.length} замечаний</span>
+                          <span className="ml-auto text-lg text-[#7a7a70] dark:text-[#c1d0cc]">{expanded ? "▲" : "▼"}</span>
+                        </div>
+                        <p className="mt-2 line-clamp-2 text-sm text-slate-700 dark:text-slate-200">{item.original_text.slice(0, 160)}{item.original_text.length > 160 ? "..." : ""}</p>
+                      </div>
+                      <div className={`overflow-hidden border-t border-[#e0e0da] transition-all duration-200 dark:border-[#38505c] ${expanded ? "max-h-[1200px] opacity-100" : "max-h-0 opacity-0"}`}>
+                        <div className="space-y-4 p-4">
+                          <div>
+                            <p className="eyebrow mb-2">текст</p>
+                            <HighlightedText text={item.original_text} issues={item.issues} />
+                          </div>
+                          <div>
+                            <p className="eyebrow mb-2">замечания</p>
+                            {item.issues.length === 0 ? <p className="text-sm text-slate-600 dark:text-slate-300">Замечаний не найдено.</p> : (
+                              <div className="grid gap-2">
+                                {item.issues.map((issue, index) => (
+                                  <div key={`${item.request_id}-${issue.term}-${index}`} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-[#38505c]">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <strong>{issue.term}</strong>
+                                      <RiskBadge risk={issue.risk} />
+                                      {issue.replacements.length > 0 && <span className="text-slate-600 dark:text-slate-300">→ замены: {issue.replacements.join(", ")}</span>}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <p className="eyebrow mb-2">резюме</p>
+                            <p className="text-sm text-slate-700 dark:text-slate-200">{localizeSystemText(item.summary)}</p>
+                          </div>
+                          {item.manual_review_required && (
+                            <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100">
+                              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                              <span>{item.manual_review_reason || "Требуется ручная проверка"}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+    </section>
+  );
+}
+
+export default function App() {
+  const [dark, setDark] = useState(false);
+  const [me, setMe] = useState(null);
+
+  const refreshMe = async () => {
+    const data = await getJson("/api/auth/me");
+    setMe(data);
+    return data;
+  };
+
+  useEffect(() => {
+    refreshMe().catch(() => setMe({ authenticated: false, plan: "anon" }));
+  }, []);
+
+  const login = async (email, password) => {
+    await postJson("/api/auth/login", { email, password });
+    await refreshMe();
+  };
+
+  const register = async (email, password) => {
+    await postJson("/api/auth/register", { email, password });
+    await refreshMe();
+  };
+
+  const logout = async () => {
+    await postJson("/api/auth/logout", {});
+    await refreshMe();
+  };
+
+  const user = me?.authenticated ? me.user : null;
+
+  return (
+    <div className={dark ? "dark" : ""}>
+      <main className="flex min-h-screen flex-col bg-[#f5f5f2] text-[#1a1a18] transition-colors dark:bg-[#17232d] dark:text-[#f4f7f2]">
+        <header className="site-header">
+          <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-5">
+            <Link to="/">
+              <img src="/logo.svg" alt="СтопСлово" className="h-8 dark:hidden" />
+              <img src="/logo-dark.svg" alt="СтопСлово" className="hidden h-8 dark:block" />
+              <p className="mt-2 text-sm font-medium text-[#7a7a70] dark:text-[#c1d0cc]">Автоматическая оценка риска для рекламных текстов</p>
+            </Link>
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <Link className="secondary-button hidden sm:inline-flex" to="/pricing">Тарифы</Link>
+              {user && <QuotaWidget user={user} />}
+              {user ? (
+                <div className="flex items-center gap-2">
+                  <span className="hidden max-w-[220px] truncate text-sm text-[#7a7a70] dark:text-[#c1d0cc] md:inline">{user.email}</span>
+                  <button className="secondary-button" onClick={logout}><LogOut className="h-4 w-4" /> Выйти</button>
+                </div>
+              ) : (
+                <Link className="primary-button" to="/login"><LogIn className="h-4 w-4" /> Войти</Link>
+              )}
               <button className="icon-button header-theme-button" onClick={() => setDark((value) => !value)} title="Переключить тему">
                 {dark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
               </button>
@@ -352,209 +567,17 @@ export default function App() {
           </div>
         </header>
 
-        <div className="mx-auto max-w-6xl space-y-6 px-4 py-8">
-          <div className="segmented">
-            <button className={mode === "single" ? "active" : ""} onClick={() => setMode("single")}>
-              <Search className="h-4 w-4" /> Один текст
-            </button>
-            <button className={mode === "batch" ? "active" : ""} onClick={() => setMode("batch")}>
-              <FileText className="h-4 w-4" /> Загрузить файл
-            </button>
-          </div>
-
-          <section className="panel">
-            <div className="grid gap-3 lg:grid-cols-[220px_1fr] lg:items-start">
-              <div>
-                <p className="eyebrow">исключения</p>
-                <h2 className="section-title">Белый список</h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Слова и словосочетания из этого списка не будут попадать в замечания.
-                </p>
-              </div>
-              <div className="grid gap-2">
-                <textarea
-                  className="input min-h-[86px] resize-y"
-                  value={excludedTermsText}
-                  onChange={(event) => setExcludedTermsText(event.target.value)}
-                  placeholder="Например, WB, Wildberries, Ozon, Nike, Apple"
-                />
-                <div className="flex flex-wrap gap-2">
-                  {excludedTerms.length > 0 ? (
-                    excludedTerms.map((term) => (
-                      <span key={term} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 dark:border-[#5aa978] dark:bg-[#203c34] dark:text-[#bdf2cf]">
-                        {term}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-xs text-slate-500 dark:text-slate-400">Список пуст. Проверка будет идти без пользовательских исключений.</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {mode === "single" ? (
-            <>
-              <section className="panel">
-                <div className="grid gap-4">
-                  <textarea className="input min-h-[140px] resize-y" value={text} onChange={(event) => setText(event.target.value)} />
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <span className="text-sm text-slate-500 dark:text-slate-400">{text.length} символов</span>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <select className="input w-64" value={contextType} onChange={(event) => setContextType(event.target.value)}>
-                        {contextOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                      </select>
-                      <button className="primary-button" disabled={loading || !text.trim()} onClick={checkSingle}>
-                        {loading ? "Проверяем..." : "Проверить"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </section>
-              {error && <div className="error-box">{error}</div>}
-              <ResultView result={result} />
-            </>
-          ) : (
-            <section className="space-y-5">
-              <div className="panel">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <input className="input max-w-lg" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={loadBatchFile} />
-                  <button className="primary-button" disabled={loading || batchRows.length === 0} onClick={checkBatch}>
-                    {loading ? `Обрабатываем ${progress}%` : `Проверить ${batchRows.length || ""}`}
-                  </button>
-                </div>
-                <div className="mt-4 rounded-md border border-sky-100 bg-sky-50 px-3 py-2 text-sm text-slate-700 dark:border-[#3d6880] dark:bg-[#1e3442] dark:text-[#d6eef8]">
-                  Загрузите Excel или CSV из рекламного кабинета. Подойдут колонки с заголовками, описаниями, подзаголовками, быстрыми ссылками и уточнениями.
-                </div>
-                {batchImportSummary && (
-                  <div className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-[#5aa978] dark:bg-[#203c34] dark:text-[#bdf2cf]">
-                    {batchImportSummary}
-                    <span className="block pt-1 text-xs opacity-80">Пакетная проверка работает в быстром словарном режиме без нейросетевого разбора. Для детального разбора используйте проверку одного текста.</span>
-                  </div>
-                )}
-                {batchRows.length > 0 && (
-                  <div className="mt-4 overflow-hidden rounded-md border border-slate-200 dark:border-[#38505c]">
-                    <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-600 dark:border-[#38505c] dark:bg-[#1b2a34] dark:text-[#c7d5d1]">
-                      Предпросмотр импорта
-                    </div>
-                    <div className="divide-y divide-slate-200 dark:divide-slate-800">
-                      {batchRows.slice(0, 3).map((row) => (
-                        <div key={row.request_id} className="grid gap-1 px-3 py-2 text-sm md:grid-cols-[120px_140px_1fr]">
-                          <span className="font-medium text-slate-500 dark:text-slate-400">{row.request_id}</span>
-                          <span className="text-slate-600 dark:text-slate-300">{row.context_type}</span>
-                          <span className="line-clamp-2 text-slate-800 dark:text-slate-100">{row.text}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {batchImportColumns.length > 0 && (
-                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                    Колонки для анализа: {batchImportColumns.join(", ")}
-                  </p>
-                )}
-                <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-[#2c4050]">
-                  <div className="h-full bg-accent-light transition-all dark:bg-accent-dark" style={{ width: `${progress}%` }} />
-                </div>
-              </div>
-              {error && <div className="error-box">{error}</div>}
-              {batchResults.length > 0 && (
-                <div className="panel">
-                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                    <div className="text-sm text-slate-600 dark:text-slate-300">
-                      Показано {visibleResults.length} из {sortedResults.length}. Страница {currentPage} из {totalPages}.
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <select
-                        className="input h-10 w-28"
-                        value={pageSize}
-                        onChange={(event) => {
-                          setPageSize(Number(event.target.value));
-                          setPage(1);
-                        }}
-                      >
-                        <option value={20}>20 строк</option>
-                        <option value={50}>50 строк</option>
-                        <option value={100}>100 строк</option>
-                      </select>
-                      <button className="secondary-button" onClick={() => setSortDesc((value) => !value)}>Сортировать по риску</button>
-                      <button className="secondary-button" disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Назад</button>
-                      <button className="secondary-button" disabled={currentPage >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Вперед</button>
-                    </div>
-                    <button className="primary-button" onClick={exportXlsx}><Download className="h-4 w-4" /> Скачать XLSX</button>
-                    <button className="secondary-button" onClick={exportCsv}><Download className="h-4 w-4" /> Скачать CSV</button>
-                  </div>
-                  <div className="grid gap-3">
-                    {visibleResults.map((item) => {
-                      const expanded = expandedResults.has(item.request_id);
-                      return (
-                        <article
-                          key={item.request_id}
-                          className="cursor-pointer rounded-[10px] border border-[#e0e0da] bg-white transition hover:border-[#c8c8c0] dark:border-[#38505c] dark:bg-[#22313b] dark:hover:border-[#5d7b89]"
-                          onClick={() => toggleResult(item.request_id)}
-                        >
-                          <div className="p-4">
-                            <div className="flex flex-wrap items-center gap-3">
-                              <strong className="font-mono text-sm text-[#1a1a18] dark:text-[#f4f7f2]">{item.request_id}</strong>
-                              <RiskBadge risk={item.overall_risk} />
-                              <span className="rounded-full border border-[#e0e0da] px-2.5 py-1 text-xs font-semibold text-[#7a7a70] dark:border-[#496574] dark:text-[#c1d0cc]">
-                                {item.issues.length} замечаний
-                              </span>
-                              <span className="ml-auto text-lg text-[#7a7a70] dark:text-[#c1d0cc]">{expanded ? "▲" : "▼"}</span>
-                            </div>
-                            <p className="mt-2 line-clamp-2 text-sm text-slate-700 dark:text-slate-200">
-                              {item.original_text.slice(0, 160)}{item.original_text.length > 160 ? "..." : ""}
-                            </p>
-                          </div>
-                          <div className={`overflow-hidden border-t border-[#e0e0da] transition-all duration-200 dark:border-[#38505c] ${expanded ? "max-h-[1200px] opacity-100" : "max-h-0 opacity-0"}`}>
-                            <div className="space-y-4 p-4">
-                              <div>
-                                <p className="eyebrow mb-2">текст</p>
-                                <HighlightedText text={item.original_text} issues={item.issues} />
-                              </div>
-                              <div>
-                                <p className="eyebrow mb-2">замечания</p>
-                                {item.issues.length === 0 ? (
-                                  <p className="text-sm text-slate-600 dark:text-slate-300">Замечаний не найдено.</p>
-                                ) : (
-                                  <div className="grid gap-2">
-                                    {item.issues.map((issue, index) => (
-                                      <div key={`${item.request_id}-${issue.term}-${index}`} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-[#38505c]">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                          <strong>{issue.term}</strong>
-                                          <RiskBadge risk={issue.risk} />
-                                          {issue.replacements.length > 0 && (
-                                            <span className="text-slate-600 dark:text-slate-300">→ замены: {issue.replacements.join(", ")}</span>
-                                          )}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                              <div>
-                                <p className="eyebrow mb-2">резюме</p>
-                                <p className="text-sm text-slate-700 dark:text-slate-200">{localizeSystemText(item.summary)}</p>
-                              </div>
-                              {item.manual_review_required && (
-                                <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100">
-                                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                                  <span>{item.manual_review_reason || "Требуется ручная проверка"}</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </article>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </section>
-          )}
+        <div className="mx-auto w-full max-w-6xl flex-1 space-y-6 px-4 py-8">
+          <Routes>
+            <Route path="/" element={<HomePage refreshMe={refreshMe} />} />
+            <Route path="/login" element={<Login onLogin={login} />} />
+            <Route path="/register" element={<Register onRegister={register} />} />
+            <Route path="/pricing" element={<Pricing user={user} />} />
+            <Route path="/terms" element={<Terms />} />
+          </Routes>
         </div>
+        <Footer />
       </main>
     </div>
   );
 }
-

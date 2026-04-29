@@ -1,13 +1,21 @@
 import re
+from datetime import datetime
+from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
+from sqlmodel import Session
 
+from app.api.v1.auth import get_user_from_request
 from app.api.v1.schemas import CheckBatchRequest, CheckBatchResponse, CheckTextRequest, CheckTextResponse
+from app.db import get_session
+from app.models.user import User
 from app.services.dictionary_checker import DictionaryChecker
 from app.services.latin_detector import LatinDetector
 from app.services.llm_analyzer import LLMAnalyzer
 from app.services.morpho_normalizer import MorphoNormalizer
 from app.services.preprocessor import TextPreprocessor
+from app.services.quota import check_quota
 from app.services.ran_lexicon import RanLexicon
 from app.services.report_generator import ReportGenerator
 
@@ -21,6 +29,7 @@ dictionary = DictionaryChecker()
 llm = LLMAnalyzer()
 reporter = ReportGenerator()
 RESULTS: dict[str, dict] = {}
+ANON_COOKIE = "stopslovo_anon_id"
 
 
 def _excluded_spans(text: str, excluded_terms: list[str]) -> list[tuple[int, int]]:
@@ -40,6 +49,34 @@ def _inside_spans(item: dict, spans: list[tuple[int, int]]) -> bool:
     return start is not None and end is not None and any(span_start <= start and end <= span_end for span_start, span_end in spans)
 
 
+def _active_plan(user: User | None) -> str:
+    if not user:
+        return "anon"
+    if user.plan_expires_at and user.plan_expires_at < datetime.utcnow():
+        return "free"
+    return user.plan
+
+
+def _quota_identity(request: Request, response: Response, session: Session) -> tuple[str, str]:
+    user = get_user_from_request(request, session)
+    if user:
+        return user.id, _active_plan(user)
+    anon_id = request.cookies.get(ANON_COOKIE) or str(uuid4())
+    response.set_cookie(ANON_COOKIE, anon_id, max_age=365 * 24 * 60 * 60, httponly=True, samesite="lax")
+    return f"anon:{anon_id}", "anon"
+
+
+def _quota_error() -> JSONResponse:
+    return JSONResponse(
+        status_code=402,
+        content={
+            "error": "quota_exceeded",
+            "message": "Исчерпан лимит на этот месяц. Обновите тариф.",
+            "upgrade_url": "/pricing",
+        },
+    )
+
+
 def process_request(payload: CheckTextRequest) -> dict:
     clean_text = preprocessor.clean(payload.text)
     tokens = preprocessor.tokenize(clean_text)
@@ -56,12 +93,28 @@ def process_request(payload: CheckTextRequest) -> dict:
 
 
 @router.post("/text", response_model=CheckTextResponse)
-def check_text(payload: CheckTextRequest) -> dict:
+def check_text(
+    payload: CheckTextRequest,
+    request: Request,
+    response: Response,
+    session: Session = Depends(get_session),
+) -> dict | JSONResponse:
+    user_id, plan = _quota_identity(request, response, session)
+    if not check_quota(session, user_id, plan, chars=len(payload.text), rows=0):
+        return _quota_error()
     return process_request(payload)
 
 
 @router.post("/batch", response_model=CheckBatchResponse)
-def check_batch(payload: CheckBatchRequest) -> dict:
+def check_batch(
+    payload: CheckBatchRequest,
+    request: Request,
+    response: Response,
+    session: Session = Depends(get_session),
+) -> dict | JSONResponse:
+    user_id, plan = _quota_identity(request, response, session)
+    if not check_quota(session, user_id, plan, chars=0, rows=len(payload.items)):
+        return _quota_error()
     return {"items": [process_request(item) for item in payload.items]}
 
 

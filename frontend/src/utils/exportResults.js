@@ -46,6 +46,34 @@ function issueDetails(issues) {
     .join("\n");
 }
 
+function aggregateByTerm(rows) {
+  const riskWeight = { high: 4, medium: 3, low: 2, safe: 1 };
+  const map = {};
+  for (const row of rows) {
+    for (const issue of row.issues || []) {
+      const key = issue.normalized || issue.term.toLowerCase();
+      if (!map[key]) {
+        map[key] = {
+          term: issue.term,
+          risk: issue.risk,
+          replacements: issue.replacements || [],
+          count: 0,
+          ads: []
+        };
+      }
+      map[key].count += 1;
+      map[key].ads.push(row.request_id);
+      if (riskWeight[issue.risk] > riskWeight[map[key].risk]) {
+        map[key].risk = issue.risk;
+      }
+      if (!map[key].replacements.length && issue.replacements?.length) {
+        map[key].replacements = issue.replacements;
+      }
+    }
+  }
+  return Object.values(map).sort((a, b) => riskWeight[b.risk] - riskWeight[a.risk] || b.count - a.count);
+}
+
 function sheetFromRows(rows) {
   return XLSX.utils.json_to_sheet(rows);
 }
@@ -77,11 +105,20 @@ function applyResultStyles(worksheet, rows) {
   }
 }
 
-export function exportResultsXlsx(rows, sourceRows = [], filename = "stopslovo-results.xlsx") {
+export function exportResultsXlsx(rows, sourceRows = [], filename = "стопслово-результаты.xlsx") {
+  const summaryData = aggregateByTerm(rows).map((item) => ({
+    "Слово": item.term,
+    "Риск": RISK_LABELS[item.risk] || item.risk,
+    "Количество": item.count,
+    "Рекомендуемая замена": item.replacements[0] || "",
+    "ID объявлений": item.ads.join(", ")
+  }));
+
   const resultData = rows.map((row) => ({
     ID: row.request_id,
     "Общий риск": RISK_LABELS[row.overall_risk] || row.overall_risk,
     "Ручная проверка": row.manual_review_required ? "Да" : "Нет",
+    "Количество замечаний": row.issues.length,
     "Проблемные слова": issueTerms(row.issues),
     "Детали замечаний": issueDetails(row.issues),
     "Исходный текст": row.original_text,
@@ -91,22 +128,16 @@ export function exportResultsXlsx(rows, sourceRows = [], filename = "stopslovo-r
   }));
 
   const workbook = XLSX.utils.book_new();
-  const sourceData = sourceRows.map((row) => ({
-    ID: row.request_id,
-    "Текст для проверки": row.text,
-    "Тип контекста": row.context_type,
-    ...row.source
-  }));
-
-  const sourceSheet = sheetFromRows(sourceData);
-  sourceSheet["!cols"] = [{ wch: 16 }, { wch: 80 }, { wch: 18 }, ...Array(30).fill({ wch: 24 })];
-  XLSX.utils.book_append_sheet(workbook, sourceSheet, "Исходник");
+  const summarySheet = sheetFromRows(summaryData);
+  summarySheet["!cols"] = [{ wch: 24 }, { wch: 14 }, { wch: 12 }, { wch: 28 }, { wch: 80 }];
+  XLSX.utils.book_append_sheet(workbook, summarySheet, "Сводка по словам");
 
   const resultSheet = sheetFromRows(resultData);
   resultSheet["!cols"] = [
     { wch: 16 },
     { wch: 12 },
     { wch: 16 },
+    { wch: 18 },
     { wch: 32 },
     { wch: 80 },
     { wch: 80 },
@@ -115,6 +146,6 @@ export function exportResultsXlsx(rows, sourceRows = [], filename = "stopslovo-r
     { wch: 24 }
   ];
   applyResultStyles(resultSheet, rows);
-  XLSX.utils.book_append_sheet(workbook, resultSheet, "Результат");
+  XLSX.utils.book_append_sheet(workbook, resultSheet, "Все объявления");
   XLSX.writeFile(workbook, filename, { compression: true, cellStyles: true });
 }

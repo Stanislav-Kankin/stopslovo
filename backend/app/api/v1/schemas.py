@@ -18,7 +18,7 @@ RiskLevel = Literal["high", "medium", "low", "safe"]
 
 class CheckTextRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=20_000)
-    context_type: ContextType
+    context_type: ContextType = "реклама"
     request_id: str | None = None
     use_llm: bool = True
     excluded_terms: list[str] = Field(default_factory=list, max_length=200)
