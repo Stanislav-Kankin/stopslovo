@@ -13,13 +13,16 @@ function formatLimit(value) {
 function Meter({ label, used, limit }) {
   const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 100;
   return (
-    <div className="grid gap-1">
-      <div className="flex items-center justify-between gap-3 text-xs text-[#7a7a70] dark:text-[#c1d0cc]">
+    <div className="grid gap-2">
+      <div className="flex items-center justify-between gap-3 text-sm font-medium text-[#65655d] dark:text-[#c1d0cc]">
         <span>{label}</span>
         <span>{formatLimit(used)} / {formatLimit(limit)}</span>
       </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-[#d8d8d1] dark:bg-[#2c4050]">
-        <div className="h-full rounded-full bg-[#4a7c10] transition-all dark:bg-[#7ed59a]" style={{ width: `${percent}%` }} />
+      <div className="h-3 overflow-hidden rounded-full border border-[#cbd0c2] bg-[#dfe3d8] shadow-inner dark:border-[#3b5361] dark:bg-[#2a3c4a]">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-[#3f760e] via-[#4f8e18] to-[#6cae35] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_1px_4px_rgba(74,124,16,0.35)] transition-all dark:from-[#63c384] dark:via-[#7ed59a] dark:to-[#a6ebba]"
+          style={{ width: `${percent}%` }}
+        />
       </div>
     </div>
   );
@@ -28,11 +31,11 @@ function Meter({ label, used, limit }) {
 export function QuotaWidget({ user }) {
   if (!user) return null;
   return (
-    <section className="border-b border-[#e0e0da] bg-[#f0f0ec]/55 px-4 py-3 dark:border-[#38505c] dark:bg-[#1d2a34]/65">
-      <div className="mx-auto grid max-w-6xl gap-3 md:grid-cols-[220px_1fr_1fr] md:items-center">
+    <section className="border-b border-[#e0e0da] bg-[#f7f7f4]/85 px-4 py-4 dark:border-[#38505c] dark:bg-[#1d2a34]/75">
+      <div className="mx-auto grid max-w-6xl gap-4 md:grid-cols-[260px_1fr_1fr] md:items-center">
         <div>
           <p className="eyebrow">лимиты</p>
-          <p className="text-sm font-semibold text-[#1a1a18] dark:text-[#f4f7f2]">{planLabels[user.plan] || user.plan}</p>
+          <p className="text-base font-semibold leading-tight text-[#1a1a18] dark:text-[#f4f7f2]">{planLabels[user.plan] || user.plan}</p>
         </div>
         <Meter label="Символы в месяц" used={user.chars_used ?? 0} limit={user.chars_limit ?? 0} />
         <Meter label="Строки файлов в месяц" used={user.rows_used ?? 0} limit={user.rows_limit ?? 0} />
