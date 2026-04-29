@@ -36,7 +36,24 @@ export function parseCsv(text) {
 }
 
 export function toCsv(rows) {
-  const header = ["request_id", "overall_risk", "manual_review_required", "issues", "rewritten_text", "summary"];
+  const riskLabels = {
+    high: "высокий",
+    medium: "средний",
+    low: "низкий",
+    safe: "без замечаний"
+  };
+  const localizeSystemText = (value) =>
+    String(value ?? "")
+      .replace(/\boverall risk\b/gi, "общий риск")
+      .replace(/\bLLM[- ]?анализ\b/gi, "нейросетевой анализ")
+      .replace(/\bLLM[- ]?разбор\b/gi, "нейросетевой разбор")
+      .replace(/\bLLM\b/g, "нейросетевой разбор")
+      .replace(/\bDeepSeek\b/g, "нейросетевой сервис")
+      .replace(/\bhigh\b/gi, riskLabels.high)
+      .replace(/\bmedium\b/gi, riskLabels.medium)
+      .replace(/\blow\b/gi, riskLabels.low)
+      .replace(/\bsafe\b/gi, riskLabels.safe);
+  const header = ["ID", "Общий риск", "Ручная проверка", "Замечания", "Переписанный текст", "Резюме"];
   const escape = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
   const delimiter = ";";
   return [
@@ -45,11 +62,11 @@ export function toCsv(rows) {
     ...rows.map((row) =>
       [
         row.request_id,
-        row.overall_risk,
-        row.manual_review_required,
-        row.issues.map((issue) => `${issue.term}:${issue.risk}`).join("; "),
+        riskLabels[row.overall_risk] || row.overall_risk,
+        row.manual_review_required ? "да" : "нет",
+        row.issues.map((issue) => `${issue.term}: ${riskLabels[issue.risk] || issue.risk}`).join("; "),
         row.rewritten_text,
-        row.summary
+        localizeSystemText(row.summary)
       ]
         .map(escape)
         .join(delimiter)

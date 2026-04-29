@@ -13,6 +13,26 @@ const RISK_FONT = {
   safe: "2A7A2A"
 };
 
+const RISK_LABELS = {
+  high: "высокий",
+  medium: "средний",
+  low: "низкий",
+  safe: "без замечаний"
+};
+
+function localizeSystemText(value) {
+  return String(value ?? "")
+    .replace(/\boverall risk\b/gi, "общий риск")
+    .replace(/\bLLM[- ]?анализ\b/gi, "нейросетевой анализ")
+    .replace(/\bLLM[- ]?разбор\b/gi, "нейросетевой разбор")
+    .replace(/\bLLM\b/g, "нейросетевой разбор")
+    .replace(/\bDeepSeek\b/g, "нейросетевой сервис")
+    .replace(/\bhigh\b/gi, RISK_LABELS.high)
+    .replace(/\bmedium\b/gi, RISK_LABELS.medium)
+    .replace(/\blow\b/gi, RISK_LABELS.low)
+    .replace(/\bsafe\b/gi, RISK_LABELS.safe);
+}
+
 function issueTerms(issues) {
   return issues.map((issue) => issue.term).join(", ");
 }
@@ -21,7 +41,7 @@ function issueDetails(issues) {
   return issues
     .map((issue) => {
       const replacements = issue.replacements?.length ? `; замены: ${issue.replacements.join(", ")}` : "";
-      return `${issue.term} (${issue.risk}): ${issue.reason}${replacements}`;
+      return `${issue.term} (${RISK_LABELS[issue.risk] || issue.risk}): ${issue.reason}${replacements}`;
     })
     .join("\n");
 }
@@ -60,13 +80,13 @@ function applyResultStyles(worksheet, rows) {
 export function exportResultsXlsx(rows, sourceRows = [], filename = "stopslovo-results.xlsx") {
   const resultData = rows.map((row) => ({
     ID: row.request_id,
-    "Общий риск": row.overall_risk,
+    "Общий риск": RISK_LABELS[row.overall_risk] || row.overall_risk,
     "Ручная проверка": row.manual_review_required ? "Да" : "Нет",
     "Проблемные слова": issueTerms(row.issues),
     "Детали замечаний": issueDetails(row.issues),
     "Исходный текст": row.original_text,
     "Переписанный текст": row.rewritten_text,
-    "Резюме": row.summary,
+    "Резюме": localizeSystemText(row.summary),
     "Дата проверки": row.processed_at
   }));
 

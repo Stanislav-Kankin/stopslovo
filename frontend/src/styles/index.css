@@ -17,31 +17,31 @@
 
 @layer components {
   .site-header {
-    @apply border-b border-[#e0e0da] bg-[#f0f0ec]/95 backdrop-blur transition-colors dark:border-[#30372f] dark:bg-[#1a2119]/95;
+    @apply border-b border-[#e0e0da] bg-[#f0f0ec]/95 backdrop-blur transition-colors dark:border-[#38505c] dark:bg-[#1d2a34]/95;
   }
 
   .panel {
-    @apply rounded-[10px] border border-[#e0e0da] bg-white p-5 shadow-sm transition-colors dark:border-[#30372f] dark:bg-[#181d18];
+    @apply rounded-[10px] border border-[#e0e0da] bg-white p-5 shadow-sm transition-colors dark:border-[#38505c] dark:bg-[#22313b];
   }
 
   .input {
-    @apply rounded-lg border border-[#c8c8c0] bg-white px-3 py-2 text-[#1a1a18] outline-none transition focus:border-[#4a7c10] focus:ring-2 focus:ring-[#4a7c10]/15 dark:border-[#3a453b] dark:bg-[#101410] dark:text-[#f4f4ee] dark:focus:border-[#a8d86f] dark:focus:ring-[#a8d86f]/15;
+    @apply rounded-lg border border-[#c8c8c0] bg-white px-3 py-2 text-[#1a1a18] outline-none transition focus:border-[#4a7c10] focus:ring-2 focus:ring-[#4a7c10]/15 dark:border-[#496574] dark:bg-[#182630] dark:text-[#f4f7f2] dark:focus:border-[#7ed59a] dark:focus:ring-[#7ed59a]/15;
   }
 
   .primary-button {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-[#4a7c10] px-4 py-2 font-semibold text-white transition hover:bg-[#3d680d] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#a8d86f] dark:text-[#121512] dark:hover:bg-[#bce982];
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-[#4a7c10] px-4 py-2 font-semibold text-white transition hover:bg-[#3d680d] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#7ed59a] dark:text-[#102019] dark:hover:bg-[#9be6b4];
   }
 
   .secondary-button {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-[#c8c8c0] px-3 py-2 font-medium text-[#4f4f48] transition hover:border-[#4a7c10] hover:text-[#4a7c10] dark:border-[#3a453b] dark:text-[#d6d6cc] dark:hover:border-[#a8d86f] dark:hover:text-[#a8d86f];
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-[#c8c8c0] px-3 py-2 font-medium text-[#4f4f48] transition hover:border-[#4a7c10] hover:text-[#4a7c10] dark:border-[#496574] dark:text-[#dce7e2] dark:hover:border-[#7ed59a] dark:hover:text-[#9be6b4];
   }
 
   .icon-button {
-    @apply inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[#c8c8c0] text-[#4f4f48] transition hover:border-[#4a7c10] hover:text-[#4a7c10] dark:border-[#3a453b] dark:text-[#d6d6cc] dark:hover:border-[#a8d86f] dark:hover:text-[#a8d86f];
+    @apply inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[#c8c8c0] text-[#4f4f48] transition hover:border-[#4a7c10] hover:text-[#4a7c10] dark:border-[#496574] dark:text-[#dce7e2] dark:hover:border-[#7ed59a] dark:hover:text-[#9be6b4];
   }
 
   .header-theme-button {
-    @apply bg-white/70 shadow-sm dark:bg-[#101410]/60;
+    @apply bg-white/70 shadow-sm dark:bg-[#182630]/80;
   }
 
   .badge {
@@ -49,11 +49,11 @@
   }
 
   .section-title {
-    @apply mb-3 text-xl font-semibold leading-tight text-[#1a1a18] dark:text-[#f4f4ee];
+    @apply mb-3 text-xl font-semibold leading-tight text-[#1a1a18] dark:text-[#f4f7f2];
   }
 
   .eyebrow {
-    @apply font-mono text-[10px] font-medium uppercase tracking-[0.12em] text-[#b0b0a8] dark:text-[#747d72];
+    @apply font-mono text-[10px] font-medium uppercase tracking-[0.12em] text-[#b0b0a8] dark:text-[#94aaa3];
   }
 
   .error-box {
@@ -61,14 +61,14 @@
   }
 
   .segmented {
-    @apply inline-flex rounded-[10px] border border-[#e0e0da] bg-[#f0f0ec] p-1 dark:border-[#30372f] dark:bg-[#181d18];
+    @apply inline-flex rounded-[10px] border border-[#e0e0da] bg-[#f0f0ec] p-1 dark:border-[#38505c] dark:bg-[#22313b];
   }
 
   .segmented button {
-    @apply inline-flex items-center gap-2 rounded-[7px] px-4 py-2 text-sm font-semibold text-[#7a7a70] transition dark:text-[#a8afa5];
+    @apply inline-flex items-center gap-2 rounded-[7px] px-4 py-2 text-sm font-semibold text-[#7a7a70] transition dark:text-[#b9c8c4];
   }
 
   .segmented button.active {
-    @apply border border-[#c8c8c0] bg-white text-[#1a1a18] shadow-sm dark:border-[#3a453b] dark:bg-[#101410] dark:text-[#f4f4ee];
+    @apply border border-[#c8c8c0] bg-white text-[#1a1a18] shadow-sm dark:border-[#496574] dark:bg-[#182630] dark:text-[#f4f7f2];
   }
 }

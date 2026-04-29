@@ -29,14 +29,13 @@ class DictionaryChecker:
             if entry:
                 found[(match["term"].lower(), match["start"])] = self._issue(match, entry, context_type)
             else:
-                risk = apply_context_modifier("medium", context_type)
                 found[(match["term"].lower(), match["start"])] = {
                     "term": match["term"],
                     "normalized": normalized,
                     "script": "latin",
                     "category": "missed_by_dictionary",
-                    "risk": risk,
-                    "risk_base": risk,
+                    "risk": "medium",
+                    "risk_base": "medium",
                     "reason": "Латинское слово отсутствует в словаре; нужно проверить, не является ли оно брендом, товарным знаком или заменяемым иностранным словом.",
                     "replacements": [],
                     "keep_as_is": True,
@@ -67,8 +66,8 @@ class DictionaryChecker:
                 "normalized": normalized,
                 "script": "cyrillic_borrowing",
                 "category": "missed_by_dictionary",
-                "risk": apply_context_modifier("medium", context_type),
-                "risk_base": apply_context_modifier("medium", context_type),
+                "risk": "medium",
+                "risk_base": "medium",
                 "reason": "Слово не найдено в нормативной морфологии и белом списке; нужен контекстный разбор, не является ли оно брендом, опечаткой или заимствованием.",
                 "replacements": [],
                 "keep_as_is": True,

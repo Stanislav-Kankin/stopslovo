@@ -11,6 +11,13 @@ from app.services.risk_scorer import RiskScorer
 
 logger = logging.getLogger(__name__)
 
+RISK_LABELS = {
+    "high": "высокий",
+    "medium": "средний",
+    "low": "низкий",
+    "safe": "без замечаний",
+}
+
 
 SYSTEM_PROMPT = """You are a compliance analysis engine for Russian advertising law (Federal Law No. 149-FZ).
 
@@ -139,13 +146,13 @@ class LLMAnalyzer:
 
     def _llm_skip_reason(self, text: str, flagged: list[dict], use_llm: bool) -> str | None:
         if not use_llm:
-            return "LLM отключен для этого запроса."
+            return "нейросетевой разбор отключен для этого запроса."
         if not flagged:
-            return "Нет спорных терминов для LLM-разбора."
+            return "нет спорных терминов для нейросетевого разбора."
         if len(text) > self.max_text_chars:
-            return f"Текст длиннее лимита LLM ({len(text)} > {self.max_text_chars} символов)."
+            return f"текст длиннее лимита нейросетевого разбора ({len(text)} > {self.max_text_chars} символов)."
         if len(flagged) > self.max_flagged_terms:
-            return f"Слишком много спорных терминов для одного LLM-запроса ({len(flagged)} > {self.max_flagged_terms})."
+            return f"слишком много спорных терминов для одного нейросетевого запроса ({len(flagged)} > {self.max_flagged_terms})."
         return None
 
     def _has_provider_key(self) -> bool:
@@ -202,7 +209,7 @@ class LLMAnalyzer:
             raise ValueError("DeepSeek response is missing summary delimiter")
         json_part, summary = content.split("---SUMMARY---", 1)
         data = json.loads(json_part.strip())
-        data["summary"] = self._ensure_disclaimer(summary.strip())
+        data["summary"] = self._ensure_disclaimer(self._localize_summary(summary.strip()))
         return data
 
     def _fallback(
@@ -250,17 +257,36 @@ class LLMAnalyzer:
         return rewritten
 
     def _summary(self, issues: list[dict], overall: str, manual: bool, llm_failed: bool, skip_reason: str | None) -> str:
+        risk_label = RISK_LABELS.get(overall, overall)
         if not issues:
-            base = "Проблемных слов не найдено, общий риск: safe."
+            base = f"Проблемных слов не найдено, общий риск: {risk_label}."
         else:
             critical = ", ".join(issue["term"] for issue in issues if issue["risk"] in {"high", "medium"})
-            base = f"Найдено замечаний: {len(issues)}, общий риск: {overall}. Наиболее важные слова: {critical or 'нет'}."
+            base = f"Найдено замечаний: {len(issues)}, общий риск: {risk_label}. Наиболее важные слова: {critical or 'нет'}."
         review = "Ручная проверка требуется." if manual else "Ручная проверка не требуется по автоматическим правилам."
-        fail_note = f" LLM-анализ {self.provider} недоступен, использована локальная проверка." if llm_failed else ""
-        skip_note = f" LLM не запускался: {skip_reason}" if skip_reason and issues else ""
+        fail_note = f" Нейросетевой анализ через {self.provider} недоступен, использована локальная проверка." if llm_failed else ""
+        skip_note = f" Нейросетевой разбор не запускался: {skip_reason}" if skip_reason and issues else ""
         return self._ensure_disclaimer(f"{base} {review}{fail_note}{skip_note}")
 
     @staticmethod
     def _ensure_disclaimer(summary: str) -> str:
         disclaimer = "Это автоматическая оценка риска, не юридическое заключение."
         return summary if disclaimer in summary else f"{summary} {disclaimer}"
+
+    @staticmethod
+    def _localize_summary(summary: str) -> str:
+        replacements = {
+            r"\boverall risk\b": "общий риск",
+            r"\bLLM[- ]?анализ\b": "нейросетевой анализ",
+            r"\bLLM[- ]?разбор\b": "нейросетевой разбор",
+            r"\bLLM\b": "нейросетевой разбор",
+            r"\bDeepSeek\b": "нейросетевой сервис",
+            r"\bhigh\b": "высокий",
+            r"\bmedium\b": "средний",
+            r"\blow\b": "низкий",
+            r"\bsafe\b": "без замечаний",
+        }
+        localized = summary
+        for pattern, replacement in replacements.items():
+            localized = re.sub(pattern, replacement, localized, flags=re.IGNORECASE)
+        return localized

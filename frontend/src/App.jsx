@@ -24,10 +24,17 @@ const riskLabels = {
   safe: "Без замечаний"
 };
 
+const riskSummaryLabels = {
+  high: "высокий",
+  medium: "средний",
+  low: "низкий",
+  safe: "без замечаний"
+};
+
 const riskClass = {
   high: "bg-red-100 text-red-800 border-red-200 dark:bg-red-950/60 dark:text-red-200 dark:border-red-800",
   medium: "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/60 dark:text-amber-200 dark:border-amber-800",
-  low: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700",
+  low: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-[#25394a] dark:text-[#d6e6ef] dark:border-[#48687a]",
   safe: "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-200 dark:border-emerald-800"
 };
 
@@ -67,6 +74,20 @@ function parseExcludedTerms(value) {
 
 function RiskBadge({ risk }) {
   return <span className={`badge border ${riskClass[risk] || riskClass.safe}`}>{riskLabels[risk] || risk}</span>;
+}
+
+function localizeSystemText(value) {
+  if (!value) return "";
+  return String(value)
+    .replace(/\boverall risk\b/gi, "общий риск")
+    .replace(/\bLLM[- ]?анализ\b/gi, "нейросетевой анализ")
+    .replace(/\bLLM[- ]?разбор\b/gi, "нейросетевой разбор")
+    .replace(/\bLLM\b/g, "нейросетевой разбор")
+    .replace(/\bDeepSeek\b/g, "нейросетевой сервис")
+    .replace(/\bhigh\b/gi, riskSummaryLabels.high)
+    .replace(/\bmedium\b/gi, riskSummaryLabels.medium)
+    .replace(/\blow\b/gi, riskSummaryLabels.low)
+    .replace(/\bsafe\b/gi, riskSummaryLabels.safe);
 }
 
 function HighlightedText({ text, issues }) {
@@ -165,7 +186,7 @@ function ResultView({ result }) {
         ) : (
           <div className="grid gap-3">
             {result.issues.map((issue, index) => (
-              <article key={`${issue.term}-${index}`} className="rounded-md border border-slate-200 p-4 dark:border-slate-800">
+              <article key={`${issue.term}-${index}`} className="rounded-md border border-slate-200 p-4 dark:border-[#38505c]">
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <strong className="text-slate-950 dark:text-white">{issue.term}</strong>
                   <RiskBadge risk={issue.risk} />
@@ -184,7 +205,7 @@ function ResultView({ result }) {
       <div className="panel">
         <p className="eyebrow">резюме</p>
         <h2 className="section-title">Краткое резюме</h2>
-        <p className="text-slate-700 dark:text-slate-200">{result.summary}</p>
+        <p className="text-slate-700 dark:text-slate-200">{localizeSystemText(result.summary)}</p>
       </div>
     </section>
   );
@@ -310,7 +331,7 @@ export default function App() {
 
   return (
     <div className={dark ? "dark" : ""}>
-      <main className="min-h-screen bg-[#f5f5f2] text-[#1a1a18] transition-colors dark:bg-[#121512] dark:text-[#f4f4ee]">
+      <main className="min-h-screen bg-[#f5f5f2] text-[#1a1a18] transition-colors dark:bg-[#17232d] dark:text-[#f4f7f2]">
         <header className="site-header">
           <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5">
             <div>
@@ -318,10 +339,10 @@ export default function App() {
                 <img src="/logo.svg" alt="СтопСлово" className="h-8 dark:hidden" />
                 <img src="/logo-dark.svg" alt="СтопСлово" className="hidden h-8 dark:block" />
               </div>
-              <p className="mt-2 text-sm font-medium text-[#7a7a70] dark:text-[#b8b8ad]">Автоматическая оценка риска для рекламных текстов</p>
+              <p className="mt-2 text-sm font-medium text-[#7a7a70] dark:text-[#c1d0cc]">Автоматическая оценка риска для рекламных текстов</p>
             </div>
             <div className="flex items-center gap-3">
-              <span className="hidden rounded-full border border-[#c8c8c0] bg-[#f0f0ec] px-3 py-1.5 font-mono text-xs font-medium text-[#7a7a70] dark:border-[#3a453b] dark:bg-[#1b211c] dark:text-[#b8b8ad] sm:inline-flex">
+              <span className="hidden rounded-full border border-[#c8c8c0] bg-[#f0f0ec] px-3 py-1.5 font-mono text-xs font-medium text-[#7a7a70] dark:border-[#496574] dark:bg-[#20313b] dark:text-[#c1d0cc] sm:inline-flex">
                 149-ФЗ · рекламные тексты
               </span>
               <button className="icon-button header-theme-button" onClick={() => setDark((value) => !value)} title="Переключить тему">
@@ -360,7 +381,7 @@ export default function App() {
                 <div className="flex flex-wrap gap-2">
                   {excludedTerms.length > 0 ? (
                     excludedTerms.map((term) => (
-                      <span key={term} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
+                      <span key={term} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 dark:border-[#5aa978] dark:bg-[#203c34] dark:text-[#bdf2cf]">
                         {term}
                       </span>
                     ))
@@ -402,18 +423,18 @@ export default function App() {
                     {loading ? `Обрабатываем ${progress}%` : `Проверить ${batchRows.length || ""}`}
                   </button>
                 </div>
-                <div className="mt-4 rounded-md border border-sky-100 bg-sky-50 px-3 py-2 text-sm text-slate-700 dark:border-sky-900/60 dark:bg-slate-950/40 dark:text-sky-100">
+                <div className="mt-4 rounded-md border border-sky-100 bg-sky-50 px-3 py-2 text-sm text-slate-700 dark:border-[#3d6880] dark:bg-[#1e3442] dark:text-[#d6eef8]">
                   Загрузите Excel или CSV из рекламного кабинета. Подойдут колонки с заголовками, описаниями, подзаголовками, быстрыми ссылками и уточнениями.
                 </div>
                 {batchImportSummary && (
-                  <div className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100">
+                  <div className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-[#5aa978] dark:bg-[#203c34] dark:text-[#bdf2cf]">
                     {batchImportSummary}
-                    <span className="block pt-1 text-xs opacity-80">Batch-проверка работает в быстром словарном режиме без LLM. Для детального LLM-разбора используйте проверку одного текста.</span>
+                    <span className="block pt-1 text-xs opacity-80">Пакетная проверка работает в быстром словарном режиме без нейросетевого разбора. Для детального разбора используйте проверку одного текста.</span>
                   </div>
                 )}
                 {batchRows.length > 0 && (
-                  <div className="mt-4 overflow-hidden rounded-md border border-slate-200 dark:border-slate-800">
-                    <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                  <div className="mt-4 overflow-hidden rounded-md border border-slate-200 dark:border-[#38505c]">
+                    <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-600 dark:border-[#38505c] dark:bg-[#1b2a34] dark:text-[#c7d5d1]">
                       Предпросмотр импорта
                     </div>
                     <div className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -432,7 +453,7 @@ export default function App() {
                     Колонки для анализа: {batchImportColumns.join(", ")}
                   </p>
                 )}
-                <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-[#2c4050]">
                   <div className="h-full bg-accent-light transition-all dark:bg-accent-dark" style={{ width: `${progress}%` }} />
                 </div>
               </div>
@@ -469,23 +490,23 @@ export default function App() {
                       return (
                         <article
                           key={item.request_id}
-                          className="cursor-pointer rounded-[10px] border border-[#e0e0da] bg-white transition hover:border-[#c8c8c0] dark:border-[#30372f] dark:bg-[#181d18] dark:hover:border-[#3a453b]"
+                          className="cursor-pointer rounded-[10px] border border-[#e0e0da] bg-white transition hover:border-[#c8c8c0] dark:border-[#38505c] dark:bg-[#22313b] dark:hover:border-[#5d7b89]"
                           onClick={() => toggleResult(item.request_id)}
                         >
                           <div className="p-4">
                             <div className="flex flex-wrap items-center gap-3">
-                              <strong className="font-mono text-sm text-[#1a1a18] dark:text-[#f4f4ee]">{item.request_id}</strong>
+                              <strong className="font-mono text-sm text-[#1a1a18] dark:text-[#f4f7f2]">{item.request_id}</strong>
                               <RiskBadge risk={item.overall_risk} />
-                              <span className="rounded-full border border-[#e0e0da] px-2.5 py-1 text-xs font-semibold text-[#7a7a70] dark:border-[#30372f] dark:text-[#b8b8ad]">
+                              <span className="rounded-full border border-[#e0e0da] px-2.5 py-1 text-xs font-semibold text-[#7a7a70] dark:border-[#496574] dark:text-[#c1d0cc]">
                                 {item.issues.length} замечаний
                               </span>
-                              <span className="ml-auto text-lg text-[#7a7a70] dark:text-[#b8b8ad]">{expanded ? "▲" : "▼"}</span>
+                              <span className="ml-auto text-lg text-[#7a7a70] dark:text-[#c1d0cc]">{expanded ? "▲" : "▼"}</span>
                             </div>
                             <p className="mt-2 line-clamp-2 text-sm text-slate-700 dark:text-slate-200">
                               {item.original_text.slice(0, 160)}{item.original_text.length > 160 ? "..." : ""}
                             </p>
                           </div>
-                          <div className={`overflow-hidden border-t border-[#e0e0da] transition-all duration-200 dark:border-[#30372f] ${expanded ? "max-h-[1200px] opacity-100" : "max-h-0 opacity-0"}`}>
+                          <div className={`overflow-hidden border-t border-[#e0e0da] transition-all duration-200 dark:border-[#38505c] ${expanded ? "max-h-[1200px] opacity-100" : "max-h-0 opacity-0"}`}>
                             <div className="space-y-4 p-4">
                               <div>
                                 <p className="eyebrow mb-2">текст</p>
@@ -498,7 +519,7 @@ export default function App() {
                                 ) : (
                                   <div className="grid gap-2">
                                     {item.issues.map((issue, index) => (
-                                      <div key={`${item.request_id}-${issue.term}-${index}`} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
+                                      <div key={`${item.request_id}-${issue.term}-${index}`} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-[#38505c]">
                                         <div className="flex flex-wrap items-center gap-2">
                                           <strong>{issue.term}</strong>
                                           <RiskBadge risk={issue.risk} />
@@ -513,7 +534,7 @@ export default function App() {
                               </div>
                               <div>
                                 <p className="eyebrow mb-2">резюме</p>
-                                <p className="text-sm text-slate-700 dark:text-slate-200">{item.summary}</p>
+                                <p className="text-sm text-slate-700 dark:text-slate-200">{localizeSystemText(item.summary)}</p>
                               </div>
                               {item.manual_review_required && (
                                 <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100">
