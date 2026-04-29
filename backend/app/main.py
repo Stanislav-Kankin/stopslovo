@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.v1.admin import router as admin_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.check import router as check_router
 from app.db import init_db
@@ -26,6 +27,7 @@ app.add_middleware(
 init_db()
 
 app.include_router(auth_router)
+app.include_router(admin_router)
 app.include_router(check_router)
 
 

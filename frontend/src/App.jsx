@@ -5,6 +5,7 @@ import { Link, Route, Routes } from "react-router-dom";
 import { BatchSummary } from "./components/BatchSummary";
 import { Footer } from "./components/Footer";
 import { QuotaWidget } from "./components/QuotaWidget";
+import { Admin } from "./pages/Admin";
 import { Login } from "./pages/Login";
 import { Pricing } from "./pages/Pricing";
 import { Register } from "./pages/Register";
@@ -550,7 +551,9 @@ export default function App() {
               <p className="mt-2 text-sm font-medium text-[#7a7a70] dark:text-[#c1d0cc]">Автоматическая оценка риска для рекламных текстов</p>
             </Link>
             <div className="flex flex-wrap items-center justify-end gap-3">
+              <Link className="secondary-button hidden sm:inline-flex" to="/">На главную</Link>
               <Link className="secondary-button hidden sm:inline-flex" to="/pricing">Тарифы</Link>
+              {user?.email === "admin@admin.ru" && <Link className="secondary-button hidden sm:inline-flex" to="/admin">Админка</Link>}
               {user && <QuotaWidget user={user} />}
               {user ? (
                 <div className="flex items-center gap-2">
@@ -574,6 +577,7 @@ export default function App() {
             <Route path="/register" element={<Register onRegister={register} />} />
             <Route path="/pricing" element={<Pricing user={user} />} />
             <Route path="/terms" element={<Terms />} />
+            <Route path="/admin" element={<Admin user={user} />} />
           </Routes>
         </div>
         <Footer />
