@@ -216,7 +216,7 @@ export default function App() {
   const [mode, setMode] = useState("single");
   const [text, setText] = useState("Big sale и кешбэк на premium товары только сегодня");
   const [contextType, setContextType] = useState("реклама");
-  const [excludedTermsText, setExcludedTermsText] = useState("WB\nOzon");
+  const [excludedTermsText, setExcludedTermsText] = useState("");
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -366,9 +366,9 @@ export default function App() {
             <div className="grid gap-3 lg:grid-cols-[220px_1fr] lg:items-start">
               <div>
                 <p className="eyebrow">исключения</p>
-                <h2 className="section-title">Товарные знаки</h2>
+                <h2 className="section-title">Белый список</h2>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Слова и словосочетания из этого списка не будут считаться нарушениями.
+                  Слова и словосочетания из этого списка не будут попадать в замечания.
                 </p>
               </div>
               <div className="grid gap-2">
@@ -376,7 +376,7 @@ export default function App() {
                   className="input min-h-[86px] resize-y"
                   value={excludedTermsText}
                   onChange={(event) => setExcludedTermsText(event.target.value)}
-                  placeholder="Например: WB, Ozon, Grand Line"
+                  placeholder="Например, WB, Wildberries, Ozon, Nike, Apple"
                 />
                 <div className="flex flex-wrap gap-2">
                   {excludedTerms.length > 0 ? (
