@@ -10,7 +10,7 @@
 - Healthcheck: `GET /health`
 - Локальный словарь на 150+ записей
 - Контекстная корректировка риска
-- Claude `claude-sonnet-4-20250514` при наличии `ANTHROPIC_API_KEY`
+- DeepSeek `deepseek-chat` при наличии `DEEPSEEK_API_KEY`
 - Локальный fallback без LLM для тестов и демо
 - React-интерфейс с темной темой, CSV batch и экспортом
 
@@ -60,13 +60,22 @@ cp .env.production.example .env
 3. Заполните значения:
 
 ```env
-ANTHROPIC_API_KEY=...
-SERVER_NAME=your-domain.ru
-SSL_CERT_PATH=/etc/letsencrypt/live/your-domain.ru/fullchain.pem
-SSL_KEY_PATH=/etc/letsencrypt/live/your-domain.ru/privkey.pem
+DEEPSEEK_API_KEY=...
+SERVER_NAME=dev-cloud-ksa.ru
+SSL_CERT_PATH=/etc/letsencrypt/live/dev-cloud-ksa.ru/fullchain.pem
+SSL_KEY_PATH=/etc/letsencrypt/live/dev-cloud-ksa.ru/privkey.pem
 ```
 
 4. Проверьте, что DNS домена указывает на VPS, а порты `80` и `443` открыты.
+
+Для текущего сервера нужны A-записи:
+
+```text
+@    A    185.184.78.20
+www  A    185.184.78.20
+```
+
+На скриншоте DNS сейчас указывает на `94.141.161.148`, поэтому сайт не попадет на новый VPS, пока записи не заменить на `185.184.78.20`.
 5. Запустите:
 
 ```bash
@@ -82,8 +91,8 @@ Production compose поднимает:
 
 ```bash
 docker compose ps
-curl -I https://your-domain.ru/healthz
-curl https://your-domain.ru/health
+curl -I https://dev-cloud-ksa.ru/healthz
+curl https://dev-cloud-ksa.ru/health
 ```
 
 Логи:
@@ -115,7 +124,7 @@ site-1,"Скидки на товары для дома",сайт
 ## API пример
 
 ```bash
-curl -X POST "https://your-domain.ru/api/v1/check/text" \
+curl -X POST "https://dev-cloud-ksa.ru/api/v1/check/text" \
   -H "Content-Type: application/json" \
   -d '{"text":"Big sale и кешбэк на premium товары","context_type":"реклама"}'
 ```
@@ -129,8 +138,9 @@ pytest
 
 ## Переменные окружения
 
-- `ANTHROPIC_API_KEY` - ключ Anthropic API. Если не задан, используется локальная проверка.
-- `ANTHROPIC_MODEL` - модель Claude, по умолчанию `claude-sonnet-4-20250514`.
+- `DEEPSEEK_API_KEY` - ключ DeepSeek API. Если не задан, используется локальная проверка.
+- `DEEPSEEK_MODEL` - модель DeepSeek, по умолчанию `deepseek-chat`.
+- `DEEPSEEK_BASE_URL` - базовый URL API, по умолчанию `https://api.deepseek.com`.
 - `SERVER_NAME` - домен для nginx.
 - `SSL_CERT_PATH` и `SSL_KEY_PATH` - пути к SSL-сертификату и приватному ключу на VPS.
 

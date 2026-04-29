@@ -3,7 +3,7 @@ import os
 import re
 from typing import Any
 
-from anthropic import Anthropic
+from openai import OpenAI
 
 from app.services.risk_scorer import RiskScorer
 
@@ -19,17 +19,81 @@ You receive a JSON object:
 {
   "text": "<original text>",
   "context_type": "<реклама|карточка_товара|баннер|упаковка|сайт|презентация|b2b_документ>",
-  "flagged_by_dictionary": []
+  "flagged_by_dictionary": [
+    {
+      "term": "<word as found in text>",
+      "normalized": "<base form>",
+      "script": "latin|cyrillic_borrowing",
+      "risk_base": "high|medium|low|safe",
+      "known_replacements": ["<option1>", "<option2>"]
+    }
+  ]
 }
 
 ## YOUR TASKS
 
-1. Review each flagged term in context — confirm or downgrade the risk
+1. Review each flagged term in context - confirm or downgrade the risk
 2. Find any additional terms the dictionary may have missed
 3. Assess final risk for each term (after context has already been applied by backend)
-4. Improve or confirm replacement suggestions — they must be natural Russian
+4. Improve or confirm replacement suggestions - they must be natural Russian
 5. Rewrite the full text replacing HIGH and MEDIUM risk terms
 6. Return structured JSON, then delimiter, then Russian summary
+
+## RISK LEVELS
+
+HIGH: foreign/borrowed word, natural Russian equivalent exists, consumer-facing
+MEDIUM: borderline - partially assimilated OR replacement sounds slightly unnatural
+LOW: no good Russian equivalent, or highly technical term with no standard alternative
+SAFE: fully assimilated word, proper noun, brand name, trademark
+
+## REPLACEMENT RULES
+
+Good replacements:
+- Actually used in real Russian speech (not invented or bureaucratic)
+- Match the register of the original text (casual stays casual, formal stays formal)
+- Short and specific
+
+Bad: "мероприятие по установлению деловых контактов" for "нетворкинг"
+Good: "деловые знакомства", "отраслевое общение"
+
+Bad: "распродажа товаров по сниженным ценам" for "sale"
+Good: "распродажа", "скидки"
+
+If no natural replacement exists: replacements: [], keep_as_is: true, risk: "low"
+
+Never flag: brand names, product names, trademarks, fully assimilated words
+(телефон, компьютер, интернет, такси, кофе, банк, офис)
+
+## OUTPUT FORMAT
+
+Respond ONLY with valid JSON, then the delimiter ---SUMMARY---, then a Russian summary.
+No markdown, no explanation outside this structure.
+
+{
+  "overall_risk": "high|medium|low|safe",
+  "issues": [
+    {
+      "term": "<as appears in text>",
+      "normalized": "<base form>",
+      "category": "latin|cyrillic_borrowing|missed_by_dictionary",
+      "risk": "high|medium|low|safe",
+      "reason": "<1-2 sentences referencing law logic>",
+      "replacements": ["<option1>", "<option2>"],
+      "keep_as_is": true|false
+    }
+  ],
+  "rewritten_text": "<full text with HIGH and MEDIUM terms replaced>",
+  "manual_review_required": true|false,
+  "manual_review_reason": "<if true: what specifically needs human review>"
+}
+
+---SUMMARY---
+
+<3-5 sentences in Russian for a non-technical user:
+- how many issues found and overall risk level
+- which terms are most critical
+- whether manual review is needed
+- closing disclaimer: это автоматическая оценка риска, не юридическое заключение>
 
 ## HARD CONSTRAINTS
 
@@ -45,20 +109,21 @@ You receive a JSON object:
 
 class LLMAnalyzer:
     def __init__(self) -> None:
-        self.api_key = os.getenv("ANTHROPIC_API_KEY")
-        self.model = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+        self.api_key = os.getenv("DEEPSEEK_API_KEY")
+        self.model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+        self.base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
         self.scorer = RiskScorer()
 
     def analyze(self, text: str, context_type: str, flagged: list[dict]) -> dict[str, Any]:
         if self.api_key:
             try:
-                return self._analyze_with_claude(text, context_type, flagged)
+                return self._analyze_with_deepseek(text, context_type, flagged)
             except Exception:
                 return self._fallback(text, context_type, flagged, llm_failed=True)
         return self._fallback(text, context_type, flagged)
 
-    def _analyze_with_claude(self, text: str, context_type: str, flagged: list[dict]) -> dict[str, Any]:
-        client = Anthropic(api_key=self.api_key)
+    def _analyze_with_deepseek(self, text: str, context_type: str, flagged: list[dict]) -> dict[str, Any]:
+        client = OpenAI(api_key=self.api_key, base_url=self.base_url)
         payload = {
             "text": text,
             "context_type": context_type,
@@ -73,19 +138,21 @@ class LLMAnalyzer:
                 for item in flagged
             ],
         }
-        message = client.messages.create(
+        completion = client.chat.completions.create(
             model=self.model,
-            max_tokens=2500,
             temperature=0,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
+            max_tokens=2500,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+            ],
         )
-        content = "".join(block.text for block in message.content if getattr(block, "type", "") == "text")
+        content = completion.choices[0].message.content or ""
         return self._parse_response(content)
 
     def _parse_response(self, content: str) -> dict[str, Any]:
         if "---SUMMARY---" not in content:
-            raise ValueError("Claude response is missing summary delimiter")
+            raise ValueError("DeepSeek response is missing summary delimiter")
         json_part, summary = content.split("---SUMMARY---", 1)
         data = json.loads(json_part.strip())
         data["summary"] = self._ensure_disclaimer(summary.strip())
@@ -135,7 +202,7 @@ class LLMAnalyzer:
             critical = ", ".join(issue["term"] for issue in issues if issue["risk"] in {"high", "medium"})
             base = f"Найдено замечаний: {len(issues)}, общий риск: {overall}. Наиболее важные слова: {critical or 'нет'}."
         review = "Ручная проверка требуется." if manual else "Ручная проверка не требуется по автоматическим правилам."
-        fail_note = " LLM-анализ недоступен, использована локальная проверка." if llm_failed else ""
+        fail_note = " LLM-анализ DeepSeek недоступен, использована локальная проверка." if llm_failed else ""
         return self._ensure_disclaimer(f"{base} {review}{fail_note}")
 
     @staticmethod
