@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { toCsv } from "./utils/csv";
 import { importRowsFromFile } from "./utils/importRows";
 
+const BATCH_CHUNK_SIZE = 100;
+
 const contextOptions = [
   ["реклама", "Рекламное объявление"],
   ["карточка_товара", "Карточка товара"],
@@ -45,6 +47,14 @@ async function postJson(url, body) {
     throw new Error(message || "Ошибка запроса");
   }
   return response.json();
+}
+
+function chunkItems(items, size) {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
 }
 
 function RiskBadge({ risk }) {
@@ -226,10 +236,17 @@ export default function App() {
   const checkBatch = async () => {
     setLoading(true);
     setError("");
-    setProgress(15);
+    setProgress(0);
+    setBatchResults([]);
     try {
-      const data = await postJson("/api/v1/check/batch", { items: batchRows });
-      setBatchResults(data.items);
+      const chunks = chunkItems(batchRows, BATCH_CHUNK_SIZE);
+      const collected = [];
+      for (let index = 0; index < chunks.length; index += 1) {
+        const data = await postJson("/api/v1/check/batch", { items: chunks[index] });
+        collected.push(...data.items);
+        setBatchResults([...collected]);
+        setProgress(Math.round(((index + 1) / chunks.length) * 100));
+      }
       setProgress(100);
     } catch (err) {
       setError(err.message);
@@ -256,7 +273,10 @@ export default function App() {
           <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5">
             <div>
               <p className="eyebrow mb-2 text-[#4a7c10] dark:text-[#a8d86f]">compliance scanner</p>
-              <h1 className="text-[32px] font-semibold leading-tight tracking-normal text-[#1a1a18] dark:text-[#f4f4ee]">СтопСлово</h1>
+              <div className="flex items-center">
+                <img src="/logo.svg" alt="StopSlovo" className="h-9 dark:hidden" />
+                <img src="/logo-dark.svg" alt="StopSlovo" className="hidden h-9 dark:block" />
+              </div>
               <p className="mt-2 text-sm font-medium text-[#7a7a70] dark:text-[#b8b8ad]">Автоматическая оценка риска для рекламных текстов</p>
             </div>
             <div className="flex items-center gap-3">
@@ -307,7 +327,7 @@ export default function App() {
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <input className="input max-w-lg" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={loadBatchFile} />
                   <button className="primary-button" disabled={loading || batchRows.length === 0} onClick={checkBatch}>
-                    {loading ? "Обрабатываем..." : `Проверить ${batchRows.length || ""}`}
+                    {loading ? `Обрабатываем ${progress}%` : `Проверить ${batchRows.length || ""}`}
                   </button>
                 </div>
                 <div className="mt-4 rounded-md border border-sky-100 bg-sky-50 px-3 py-2 text-sm text-slate-700 dark:border-sky-900/60 dark:bg-slate-950/40 dark:text-sky-100">

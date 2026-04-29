@@ -1,0 +1,6 @@
+<svg width="180" height="40" viewBox="0 0 180 40" xmlns="http://www.w3.org/2000/svg">
+  <path d="M10 2 L20 6.5 L20 15 C20 20.5 10 25 10 25 C10 25 0 20.5 0 15 L0 6.5 Z" fill="#52b788"/>
+  <line x1="4" y1="18" x2="16" y2="8" stroke="#111110" stroke-width="2" stroke-linecap="round"/>
+  <text x="10" y="17" text-anchor="middle" font-family="Georgia,serif" font-size="9" fill="#111110">С</text>
+  <text x="28" y="23" font-family="Georgia,serif" font-size="18" fill="#e8e6e0" letter-spacing="-0.3">СтопСлово</text>
+</svg>

@@ -18,13 +18,20 @@ const TEXT_COLUMN_HINTS = [
   "заголовок",
   "подзаголовок",
   "описание",
+  "объявление",
+  "предложение",
+  "текстовый блок",
+  "текстовых блоков",
   "быстрая ссылка",
   "быстрые ссылки",
   "уточнение",
   "уточнения",
   "название",
   "промо",
+  "offer",
   "ссылка",
+  "quick link",
+  "sitelink",
   "callout",
   "headline",
   "description",
@@ -45,6 +52,7 @@ const SKIP_COLUMN_HINTS = [
   "статус",
   "дата"
 ];
+const EMPTY_VALUES = new Set(["", "-", "—", "–", "нет", "n/a", "none", "null"]);
 
 function normalizeHeader(value) {
   return String(value || "").trim().toLowerCase().replaceAll("ё", "е");
@@ -67,12 +75,79 @@ function isTextColumn(header) {
   return TEXT_COLUMN_HINTS.some((hint) => normalized.includes(normalizeHeader(hint)));
 }
 
+function cleanCell(value) {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function isMeaningfulText(value) {
+  const cleaned = cleanCell(value).toLowerCase();
+  if (EMPTY_VALUES.has(cleaned)) return false;
+  return /[a-zа-яё0-9]/i.test(cleaned);
+}
+
 function rowToText(row, textColumns) {
   return textColumns
-    .map((column) => String(row[column] ?? "").trim())
-    .filter(Boolean)
+    .map((column) => cleanCell(row[column]))
+    .filter(isMeaningfulText)
     .filter((value, index, values) => values.indexOf(value) === index)
     .join(". ");
+}
+
+function detectDelimiter(rows) {
+  const candidates = [";", "\t", ","];
+  const sample = rows
+    .slice(0, 20)
+    .map((row) => cleanCell(row[0]))
+    .filter((cell) => cell);
+  return candidates
+    .map((delimiter) => ({
+      delimiter,
+      score: sample.reduce((sum, cell) => sum + cell.split(delimiter).length, 0)
+    }))
+    .sort((a, b) => b.score - a.score)[0]?.delimiter;
+}
+
+function splitSingleColumnRows(rows) {
+  const singleColumnRows = rows.filter((row) => row.filter((cell) => cleanCell(cell)).length === 1);
+  if (singleColumnRows.length < Math.max(3, rows.length * 0.6)) return rows;
+  const delimiter = detectDelimiter(singleColumnRows);
+  if (!delimiter || delimiter === "," && !singleColumnRows.some((row) => cleanCell(row[0]).includes(","))) return rows;
+  const averageParts = singleColumnRows.reduce((sum, row) => sum + cleanCell(row[0]).split(delimiter).length, 0) / singleColumnRows.length;
+  if (averageParts < 2) return rows;
+  return rows.map((row) => {
+    const nonEmpty = row.filter((cell) => cleanCell(cell));
+    return nonEmpty.length === 1 ? cleanCell(nonEmpty[0]).split(delimiter).map(cleanCell) : row;
+  });
+}
+
+function headerScore(row) {
+  const cells = row.map(normalizeHeader).filter(Boolean);
+  const textHits = cells.filter((cell) => TEXT_COLUMN_HINTS.some((hint) => cell.includes(normalizeHeader(hint)))).length;
+  const skipHits = cells.filter((cell) => SKIP_COLUMN_HINTS.some((hint) => cell.includes(normalizeHeader(hint)))).length;
+  return textHits * 8 + Math.min(cells.length, 30) + skipHits;
+}
+
+function rowsFromSheet(sheet) {
+  const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false });
+  const table = splitSingleColumnRows(raw)
+    .map((row) => row.map(cleanCell))
+    .filter((row) => row.some((cell) => cell));
+  if (!table.length) return [];
+
+  const headerIndex = table
+    .map((row, index) => ({ index, score: headerScore(row) }))
+    .sort((a, b) => b.score - a.score)[0]?.index ?? 0;
+  const headers = table[headerIndex].map((header, index) => cleanCell(header) || `column_${index + 1}`);
+  const seen = new Map();
+  const uniqueHeaders = headers.map((header) => {
+    const count = seen.get(header) || 0;
+    seen.set(header, count + 1);
+    return count ? `${header}_${count + 1}` : header;
+  });
+
+  return table.slice(headerIndex + 1).map((row) =>
+    Object.fromEntries(uniqueHeaders.map((header, index) => [header, row[index] ?? ""]))
+  );
 }
 
 function normalizeRows(rawRows) {
@@ -111,7 +186,7 @@ function normalizeRows(rawRows) {
         context_type: isContext(contextValue) ? String(contextValue).trim() : "реклама"
       };
     })
-    .filter((row) => row.text);
+    .filter((row) => isMeaningfulText(row.text));
 
   return {
     rows,
@@ -138,6 +213,6 @@ export async function importRowsFromFile(file) {
     return { rows: [], summary: "В файле не найдено листов.", columns: [] };
   }
   const sheet = workbook.Sheets[firstSheetName];
-  const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: "", raw: false });
+  const rawRows = rowsFromSheet(sheet);
   return normalizeRows(rawRows);
 }
