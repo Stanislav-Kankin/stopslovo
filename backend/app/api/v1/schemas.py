@@ -20,6 +20,7 @@ class CheckTextRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=20_000)
     context_type: ContextType
     request_id: str | None = None
+    use_llm: bool = True
 
 
 class CheckBatchRequest(BaseModel):

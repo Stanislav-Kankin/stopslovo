@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 from typing import Any
@@ -6,6 +7,8 @@ from typing import Any
 from openai import OpenAI
 
 from app.services.risk_scorer import RiskScorer
+
+logger = logging.getLogger(__name__)
 
 
 SYSTEM_PROMPT = """You are a compliance analysis engine for Russian advertising law (Federal Law No. 149-FZ).
@@ -114,11 +117,12 @@ class LLMAnalyzer:
         self.base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
         self.scorer = RiskScorer()
 
-    def analyze(self, text: str, context_type: str, flagged: list[dict]) -> dict[str, Any]:
-        if self.api_key:
+    def analyze(self, text: str, context_type: str, flagged: list[dict], use_llm: bool = True) -> dict[str, Any]:
+        if use_llm and self.api_key:
             try:
                 return self._analyze_with_deepseek(text, context_type, flagged)
-            except Exception:
+            except Exception as exc:
+                logger.exception("DeepSeek analysis failed: %s", exc)
                 return self._fallback(text, context_type, flagged, llm_failed=True)
         return self._fallback(text, context_type, flagged)
 

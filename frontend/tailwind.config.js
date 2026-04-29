@@ -4,6 +4,7 @@ export default {
   theme: {
     extend: {
       fontFamily: {
+        logo: ["Playfair Display", "serif"],
         mono: ["JetBrains Mono", "monospace"],
         sans: ["Golos Text", "system-ui", "sans-serif"]
       },

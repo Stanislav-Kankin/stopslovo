@@ -38,8 +38,10 @@ export function parseCsv(text) {
 export function toCsv(rows) {
   const header = ["request_id", "overall_risk", "manual_review_required", "issues", "rewritten_text", "summary"];
   const escape = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+  const delimiter = ";";
   return [
-    header.join(","),
+    "\uFEFFsep=;",
+    header.join(delimiter),
     ...rows.map((row) =>
       [
         row.request_id,
@@ -50,7 +52,7 @@ export function toCsv(rows) {
         row.summary
       ]
         .map(escape)
-        .join(",")
+        .join(delimiter)
     )
   ].join("\n");
 }

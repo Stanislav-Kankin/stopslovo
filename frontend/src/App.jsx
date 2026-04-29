@@ -196,11 +196,16 @@ export default function App() {
   const [batchImportColumns, setBatchImportColumns] = useState([]);
   const [progress, setProgress] = useState(0);
   const [sortDesc, setSortDesc] = useState(true);
+  const [pageSize, setPageSize] = useState(20);
+  const [page, setPage] = useState(1);
 
   const sortedResults = useMemo(
     () => [...batchResults].sort((a, b) => (sortDesc ? riskWeight[b.overall_risk] - riskWeight[a.overall_risk] : riskWeight[a.overall_risk] - riskWeight[b.overall_risk])),
     [batchResults, sortDesc]
   );
+  const totalPages = Math.max(1, Math.ceil(sortedResults.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const visibleResults = sortedResults.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const checkSingle = async () => {
     setLoading(true);
@@ -224,6 +229,7 @@ export default function App() {
       setBatchImportSummary(imported.summary);
       setBatchImportColumns(imported.columns);
       setBatchResults([]);
+      setPage(1);
       setProgress(0);
     } catch (err) {
       setBatchRows([]);
@@ -238,11 +244,14 @@ export default function App() {
     setError("");
     setProgress(0);
     setBatchResults([]);
+    setPage(1);
     try {
       const chunks = chunkItems(batchRows, BATCH_CHUNK_SIZE);
       const collected = [];
       for (let index = 0; index < chunks.length; index += 1) {
-        const data = await postJson("/api/v1/check/batch", { items: chunks[index] });
+        const data = await postJson("/api/v1/check/batch", {
+          items: chunks[index].map((item) => ({ ...item, use_llm: false }))
+        });
         collected.push(...data.items);
         setBatchResults([...collected]);
         setProgress(Math.round(((index + 1) / chunks.length) * 100));
@@ -273,10 +282,7 @@ export default function App() {
           <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5">
             <div>
               <p className="eyebrow mb-2 text-[#4a7c10] dark:text-[#a8d86f]">compliance scanner</p>
-              <div className="flex items-center">
-                <img src="/logo.svg" alt="StopSlovo" className="h-9 dark:hidden" />
-                <img src="/logo-dark.svg" alt="StopSlovo" className="hidden h-9 dark:block" />
-              </div>
+              <h1 className="font-logo text-[38px] font-bold italic leading-none tracking-normal text-[#1a1a18] dark:text-[#f4f4ee]">StopSlovo</h1>
               <p className="mt-2 text-sm font-medium text-[#7a7a70] dark:text-[#b8b8ad]">Автоматическая оценка риска для рекламных текстов</p>
             </div>
             <div className="flex items-center gap-3">
@@ -336,6 +342,7 @@ export default function App() {
                 {batchImportSummary && (
                   <div className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100">
                     {batchImportSummary}
+                    <span className="block pt-1 text-xs opacity-80">Batch-проверка работает в быстром словарном режиме без LLM. Для детального LLM-разбора используйте проверку одного текста.</span>
                   </div>
                 )}
                 {batchRows.length > 0 && (
@@ -366,8 +373,27 @@ export default function App() {
               {error && <div className="error-box">{error}</div>}
               {batchResults.length > 0 && (
                 <div className="panel overflow-x-auto">
-                  <div className="mb-4 flex items-center justify-between gap-3">
-                    <button className="secondary-button" onClick={() => setSortDesc((value) => !value)}>Сортировать по риску</button>
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div className="text-sm text-slate-600 dark:text-slate-300">
+                      Показано {visibleResults.length} из {sortedResults.length}. Страница {currentPage} из {totalPages}.
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        className="input h-10 w-28"
+                        value={pageSize}
+                        onChange={(event) => {
+                          setPageSize(Number(event.target.value));
+                          setPage(1);
+                        }}
+                      >
+                        <option value={20}>20 строк</option>
+                        <option value={50}>50 строк</option>
+                        <option value={100}>100 строк</option>
+                      </select>
+                      <button className="secondary-button" onClick={() => setSortDesc((value) => !value)}>Сортировать по риску</button>
+                      <button className="secondary-button" disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Назад</button>
+                      <button className="secondary-button" disabled={currentPage >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Вперед</button>
+                    </div>
                     <button className="secondary-button" onClick={exportCsv}><Download className="h-4 w-4" /> CSV</button>
                   </div>
                   <table className="w-full min-w-[760px] text-left text-sm">
@@ -381,7 +407,7 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {sortedResults.map((item) => (
+                      {visibleResults.map((item) => (
                         <tr key={item.request_id} className="border-t border-slate-200 dark:border-slate-800">
                           <td className="py-3 pr-3">{item.request_id}</td>
                           <td className="py-3 pr-3"><RiskBadge risk={item.overall_risk} /></td>

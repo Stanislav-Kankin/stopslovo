@@ -24,7 +24,7 @@ def process_request(payload: CheckTextRequest) -> dict:
     tokens = preprocessor.tokenize(clean_text)
     latin = latin_detector.detect(clean_text)
     flagged = dictionary.check(tokens, latin, normalizer, payload.context_type)
-    analysis = llm.analyze(clean_text, payload.context_type, flagged)
+    analysis = llm.analyze(clean_text, payload.context_type, flagged, use_llm=payload.use_llm)
     result = reporter.build(clean_text, payload.request_id, analysis)
     RESULTS[result["request_id"]] = result
     return result
