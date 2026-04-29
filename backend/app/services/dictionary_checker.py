@@ -18,7 +18,7 @@ class DictionaryChecker:
         else:
             self.registered_names = set()
 
-    def check(self, tokens: list[dict], latin_matches: list[dict], normalizer, context_type: str) -> list[dict]:
+    def check(self, tokens: list[dict], latin_matches: list[dict], normalizer, context_type: str, ran_lexicon=None) -> list[dict]:
         found: dict[tuple[str, int | None], dict] = {}
 
         for match in latin_matches:
@@ -60,7 +60,7 @@ class DictionaryChecker:
                     context_type,
                 )
                 continue
-            if normalizer.is_known(token["term"]):
+            if normalizer.is_known(token["term"]) or (ran_lexicon and ran_lexicon.contains(normalized)):
                 continue
             found[(token["term"].lower(), token["start"])] = {
                 "term": token["term"],

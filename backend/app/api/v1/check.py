@@ -6,6 +6,7 @@ from app.services.latin_detector import LatinDetector
 from app.services.llm_analyzer import LLMAnalyzer
 from app.services.morpho_normalizer import MorphoNormalizer
 from app.services.preprocessor import TextPreprocessor
+from app.services.ran_lexicon import RanLexicon
 from app.services.report_generator import ReportGenerator
 
 router = APIRouter(prefix="/api/v1/check", tags=["check"])
@@ -13,6 +14,7 @@ router = APIRouter(prefix="/api/v1/check", tags=["check"])
 preprocessor = TextPreprocessor()
 latin_detector = LatinDetector()
 normalizer = MorphoNormalizer()
+ran_lexicon = RanLexicon()
 dictionary = DictionaryChecker()
 llm = LLMAnalyzer()
 reporter = ReportGenerator()
@@ -23,7 +25,7 @@ def process_request(payload: CheckTextRequest) -> dict:
     clean_text = preprocessor.clean(payload.text)
     tokens = preprocessor.tokenize(clean_text)
     latin = latin_detector.detect(clean_text)
-    flagged = dictionary.check(tokens, latin, normalizer, payload.context_type)
+    flagged = dictionary.check(tokens, latin, normalizer, payload.context_type, ran_lexicon)
     analysis = llm.analyze(clean_text, payload.context_type, flagged, use_llm=payload.use_llm)
     result = reporter.build(clean_text, payload.request_id, analysis)
     RESULTS[result["request_id"]] = result

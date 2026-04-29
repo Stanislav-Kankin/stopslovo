@@ -214,6 +214,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Local extraction scratch
+.tmp_*/
+
 # PyPI configuration file
 .pypirc
 
