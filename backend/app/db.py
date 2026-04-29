@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from sqlalchemy import inspect, text
 from sqlmodel import Session, SQLModel, create_engine
 
 
@@ -12,6 +13,25 @@ engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
+    ensure_user_columns()
+
+
+def ensure_user_columns() -> None:
+    columns = {
+        column["name"]
+        for column in inspect(engine).get_columns("user")
+    }
+    migrations = {
+        "payment_provider": "ALTER TABLE user ADD COLUMN payment_provider VARCHAR",
+        "payment_customer_id": "ALTER TABLE user ADD COLUMN payment_customer_id VARCHAR",
+        "payment_subscription_id": "ALTER TABLE user ADD COLUMN payment_subscription_id VARCHAR",
+        "last_payment_id": "ALTER TABLE user ADD COLUMN last_payment_id VARCHAR",
+        "updated_at": "ALTER TABLE user ADD COLUMN updated_at DATETIME",
+    }
+    with engine.begin() as connection:
+        for name, statement in migrations.items():
+            if name not in columns:
+                connection.execute(text(statement))
 
 
 def get_session():

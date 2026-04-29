@@ -1,3 +1,4 @@
+import os
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -9,7 +10,7 @@ from app.models.user import UsageRecord, User
 
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
-ADMIN_EMAIL = "admin@admin.ru"
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@admin.ru").lower()
 
 
 def require_admin(request: Request, session: Annotated[Session, Depends(get_session)]) -> User:
@@ -39,6 +40,10 @@ def overview(
                 "email": user.email,
                 "plan": user.plan,
                 "created_at": user.created_at,
+                "updated_at": user.updated_at,
+                "payment_provider": user.payment_provider,
+                "payment_customer_id": user.payment_customer_id,
+                "payment_subscription_id": user.payment_subscription_id,
                 "is_active": user.is_active,
             }
             for user in recent_users

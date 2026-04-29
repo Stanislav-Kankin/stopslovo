@@ -12,7 +12,7 @@ export function Admin({ user }) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (user?.email !== "admin@admin.ru") return;
+    if (!user?.is_admin) return;
     fetch("/api/admin/overview", { credentials: "include" })
       .then(async (response) => {
         const payload = await response.json();
@@ -23,7 +23,7 @@ export function Admin({ user }) {
       .catch((err) => setError(err.message));
   }, [user]);
 
-  if (user?.email !== "admin@admin.ru") {
+  if (!user?.is_admin) {
     return (
       <section className="panel">
         <h1 className="section-title">Админка</h1>

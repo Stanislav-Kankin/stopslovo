@@ -23,6 +23,8 @@ JWT_ALGORITHM = "HS256"
 TOKEN_DAYS = 30
 COOKIE_NAME = "stopslovo_token"
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://127.0.0.1:5173")
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@admin.ru").lower()
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 
 
 class AuthRequest(BaseModel):
@@ -97,6 +99,13 @@ def user_payload(user: User, session: Session) -> dict:
         "plan": plan,
         "plan_expires_at": user.plan_expires_at,
         "is_active": user.is_active,
+        "is_admin": user.email.lower() == ADMIN_EMAIL,
+        "created_at": user.created_at,
+        "updated_at": user.updated_at,
+        "payment_provider": user.payment_provider,
+        "payment_customer_id": user.payment_customer_id,
+        "payment_subscription_id": user.payment_subscription_id,
+        "last_payment_id": user.last_payment_id,
         **quota,
     }
 
@@ -121,8 +130,8 @@ def register(payload: AuthRequest, response: Response, session: Annotated[Sessio
 @router.post("/login", response_model=AuthResponse)
 def login(payload: AuthRequest, response: Response, session: Annotated[Session, Depends(get_session)]) -> dict:
     user = session.exec(select(User).where(User.email == payload.email.lower())).first()
-    if not user and payload.email.lower() == "admin@admin.ru" and payload.password == "admin8131378":
-        user = User(email="admin@admin.ru", hashed_password=hash_password(payload.password), plan="agency_m")
+    if not user and ADMIN_PASSWORD and payload.email.lower() == ADMIN_EMAIL and payload.password == ADMIN_PASSWORD:
+        user = User(email=ADMIN_EMAIL, hashed_password=hash_password(payload.password), plan="agency_m")
         session.add(user)
         session.commit()
         session.refresh(user)

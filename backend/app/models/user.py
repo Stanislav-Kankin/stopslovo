@@ -12,7 +12,12 @@ class User(SQLModel, table=True):
     oauth_id: str | None = None
     plan: str = "free"
     plan_expires_at: datetime | None = None
+    payment_provider: str | None = None
+    payment_customer_id: str | None = None
+    payment_subscription_id: str | None = None
+    last_payment_id: str | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
     is_active: bool = True
 
 

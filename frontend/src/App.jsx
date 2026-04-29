@@ -227,7 +227,7 @@ function ResultView({ result }) {
   );
 }
 
-function HomePage({ refreshMe }) {
+function HomePage({ me, refreshMe }) {
   const [mode, setMode] = useState("single");
   const [text, setText] = useState("Big sale и кешбэк на premium товары только сегодня");
   const [excludedTermsText, setExcludedTermsText] = useState("");
@@ -257,6 +257,8 @@ function HomePage({ refreshMe }) {
   const totalPages = Math.max(1, Math.ceil(sortedResults.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const visibleResults = sortedResults.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const currentUser = me?.authenticated ? me.user : null;
+  const rowsRemaining = currentUser?.rows_remaining;
 
   const checkSingle = async () => {
     setLoading(true);
@@ -307,7 +309,17 @@ function HomePage({ refreshMe }) {
     setExpandedResults(new Set());
     setPage(1);
     try {
-      const chunks = chunkItems(batchRows, BATCH_CHUNK_SIZE);
+      const allowedRows = typeof rowsRemaining === "number" && rowsRemaining >= 0 ? rowsRemaining : batchRows.length;
+      if (allowedRows <= 0) {
+        setError("Лимит строк для файлов исчерпан. Обновите тариф или дождитесь следующего месяца.");
+        setLoading(false);
+        return;
+      }
+      const rowsToProcess = batchRows.slice(0, Math.min(batchRows.length, allowedRows));
+      if (rowsToProcess.length < batchRows.length) {
+        setError(`По текущему лимиту будут обработаны первые ${rowsToProcess.length} строк из ${batchRows.length}.`);
+      }
+      const chunks = chunkItems(rowsToProcess, BATCH_CHUNK_SIZE);
       const collected = [];
       for (let index = 0; index < chunks.length; index += 1) {
         const data = await postJson("/api/v1/check/batch", {
@@ -553,7 +565,7 @@ export default function App() {
             <div className="flex flex-wrap items-center justify-end gap-3">
               <Link className="secondary-button hidden sm:inline-flex" to="/">На главную</Link>
               <Link className="secondary-button hidden sm:inline-flex" to="/pricing">Тарифы</Link>
-              {user?.email === "admin@admin.ru" && <Link className="secondary-button hidden sm:inline-flex" to="/admin">Админка</Link>}
+              {user?.is_admin && <Link className="secondary-button hidden sm:inline-flex" to="/admin">Админка</Link>}
               {user ? (
                 <div className="flex items-center gap-2">
                   <span className="hidden max-w-[180px] truncate rounded-full border border-[#e0e0da] px-3 py-1.5 text-xs font-medium text-[#7a7a70] dark:border-[#496574] dark:text-[#c1d0cc] lg:inline">{user.email}</span>
@@ -572,7 +584,7 @@ export default function App() {
 
         <div className="mx-auto w-full max-w-6xl flex-1 space-y-6 px-4 py-8">
           <Routes>
-            <Route path="/" element={<HomePage refreshMe={refreshMe} />} />
+            <Route path="/" element={<HomePage me={me} refreshMe={refreshMe} />} />
             <Route path="/login" element={<Login onLogin={login} />} />
             <Route path="/register" element={<Register onRegister={register} />} />
             <Route path="/pricing" element={<Pricing user={user} />} />
