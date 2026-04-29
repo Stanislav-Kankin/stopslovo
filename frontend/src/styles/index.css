@@ -9,37 +9,39 @@
 
   body {
     margin: 0;
-    font-family: Inter, system-ui, sans-serif;
+    font-family: "Golos Text", system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
   }
 }
 
 @layer components {
   .site-header {
-    @apply border-b border-sky-200 bg-sky-100/90 shadow-sm backdrop-blur transition-colors dark:border-sky-900/70 dark:bg-[#102435];
+    @apply border-b border-[#e0e0da] bg-[#f0f0ec]/95 backdrop-blur transition-colors dark:border-[#30372f] dark:bg-[#1a2119]/95;
   }
 
   .panel {
-    @apply rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900;
+    @apply rounded-[10px] border border-[#e0e0da] bg-white p-5 shadow-sm transition-colors dark:border-[#30372f] dark:bg-[#181d18];
   }
 
   .input {
-    @apply rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-950 outline-none transition focus:border-accent-light focus:ring-2 focus:ring-accent-light/20 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-accent-dark dark:focus:ring-accent-dark/20;
+    @apply rounded-lg border border-[#c8c8c0] bg-white px-3 py-2 text-[#1a1a18] outline-none transition focus:border-[#4a7c10] focus:ring-2 focus:ring-[#4a7c10]/15 dark:border-[#3a453b] dark:bg-[#101410] dark:text-[#f4f4ee] dark:focus:border-[#a8d86f] dark:focus:ring-[#a8d86f]/15;
   }
 
   .primary-button {
-    @apply inline-flex items-center justify-center gap-2 rounded-md bg-accent-light px-4 py-2 font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-accent-dark dark:text-slate-950 dark:hover:bg-emerald-300;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-[#4a7c10] px-4 py-2 font-semibold text-white transition hover:bg-[#3d680d] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#a8d86f] dark:text-[#121512] dark:hover:bg-[#bce982];
   }
 
   .secondary-button {
-    @apply inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 px-3 py-2 font-medium text-slate-700 transition hover:border-accent-light hover:text-accent-light dark:border-slate-700 dark:text-slate-200 dark:hover:border-accent-dark dark:hover:text-accent-dark;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-[#c8c8c0] px-3 py-2 font-medium text-[#4f4f48] transition hover:border-[#4a7c10] hover:text-[#4a7c10] dark:border-[#3a453b] dark:text-[#d6d6cc] dark:hover:border-[#a8d86f] dark:hover:text-[#a8d86f];
   }
 
   .icon-button {
-    @apply inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 text-slate-700 transition hover:border-accent-light hover:text-accent-light dark:border-slate-700 dark:text-slate-200 dark:hover:border-accent-dark dark:hover:text-accent-dark;
+    @apply inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[#c8c8c0] text-[#4f4f48] transition hover:border-[#4a7c10] hover:text-[#4a7c10] dark:border-[#3a453b] dark:text-[#d6d6cc] dark:hover:border-[#a8d86f] dark:hover:text-[#a8d86f];
   }
 
   .header-theme-button {
-    @apply border-sky-200 bg-white/75 text-slate-700 shadow-sm hover:border-sky-500 hover:text-sky-800 dark:border-sky-800/70 dark:bg-slate-950/35 dark:text-sky-100 dark:hover:border-accent-dark dark:hover:text-accent-dark;
+    @apply bg-white/70 shadow-sm dark:bg-[#101410]/60;
   }
 
   .badge {
@@ -47,22 +49,26 @@
   }
 
   .section-title {
-    @apply mb-3 font-serif text-2xl text-slate-950 dark:text-white;
+    @apply mb-3 text-xl font-semibold leading-tight text-[#1a1a18] dark:text-[#f4f4ee];
+  }
+
+  .eyebrow {
+    @apply font-mono text-[10px] font-medium uppercase tracking-[0.12em] text-[#b0b0a8] dark:text-[#747d72];
   }
 
   .error-box {
-    @apply rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100;
+    @apply rounded-lg border border-[#f0b8b8] bg-[#fdeaea] px-4 py-3 text-sm text-[#cc3333] dark:border-red-900 dark:bg-red-950/40 dark:text-red-100;
   }
 
   .segmented {
-    @apply inline-flex rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-900;
+    @apply inline-flex rounded-[10px] border border-[#e0e0da] bg-[#f0f0ec] p-1 dark:border-[#30372f] dark:bg-[#181d18];
   }
 
   .segmented button {
-    @apply inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold text-slate-500 transition dark:text-slate-400;
+    @apply inline-flex items-center gap-2 rounded-[7px] px-4 py-2 text-sm font-semibold text-[#7a7a70] transition dark:text-[#a8afa5];
   }
 
   .segmented button.active {
-    @apply bg-accent-light text-white dark:bg-accent-dark dark:text-slate-950;
+    @apply border border-[#c8c8c0] bg-white text-[#1a1a18] shadow-sm dark:border-[#3a453b] dark:bg-[#101410] dark:text-[#f4f4ee];
   }
 }

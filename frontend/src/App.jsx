@@ -30,6 +30,10 @@ const riskClass = {
 
 const riskWeight = { high: 4, medium: 3, low: 2, safe: 1 };
 
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 async function postJson(url, body) {
   const response = await fetch(url, {
     method: "POST",
@@ -50,7 +54,7 @@ function RiskBadge({ risk }) {
 function HighlightedText({ text, issues }) {
   const terms = issues.filter((issue) => ["high", "medium"].includes(issue.risk)).map((issue) => issue.term);
   if (!terms.length) return <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">{text}</p>;
-  const pattern = new RegExp(`(${terms.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi");
+  const pattern = new RegExp(`(${terms.map(escapeRegex).join("|")})`, "gi");
   return (
     <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">
       {text.split(pattern).map((part, index) => {
@@ -58,6 +62,34 @@ function HighlightedText({ text, issues }) {
         if (!issue) return <span key={`${part}-${index}`}>{part}</span>;
         const color = issue.risk === "high" ? "bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-100" : "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-100";
         return <mark key={`${part}-${index}`} className={`rounded px-1 ${color}`}>{part}</mark>;
+      })}
+    </p>
+  );
+}
+
+function HighlightedRewrite({ text, issues }) {
+  const replacements = issues
+    .filter((issue) => ["high", "medium"].includes(issue.risk))
+    .flatMap((issue) => issue.replacements || [])
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+
+  if (!replacements.length) {
+    return <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">{text}</p>;
+  }
+
+  const pattern = new RegExp(`(${replacements.map(escapeRegex).join("|")})`, "gi");
+  return (
+    <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">
+      {text.split(pattern).map((part, index) => {
+        const changed = replacements.some((item) => item.toLowerCase() === part.toLowerCase());
+        if (!changed) return <span key={`${part}-${index}`}>{part}</span>;
+        return (
+          <mark key={`${part}-${index}`} className="rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-900 ring-1 ring-emerald-200 dark:bg-emerald-950 dark:text-emerald-100 dark:ring-emerald-800">
+            {part}
+          </mark>
+        );
       })}
     </p>
   );
@@ -89,21 +121,26 @@ function ResultView({ result }) {
 
       <div className="grid gap-5 lg:grid-cols-[1fr_0.9fr]">
         <div className="panel">
+          <p className="eyebrow">оригинал</p>
           <h2 className="section-title">Исходный текст</h2>
           <HighlightedText text={result.original_text} issues={result.issues} />
         </div>
         <div className="panel">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="section-title">Переписанный текст</h2>
+            <div>
+              <p className="eyebrow">замены</p>
+              <h2 className="section-title">Переписанный текст</h2>
+            </div>
             <button className="icon-button" onClick={copy} title="Скопировать">
               {copied ? <Check className="h-4 w-4" /> : <Clipboard className="h-4 w-4" />}
             </button>
           </div>
-          <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">{result.rewritten_text}</p>
+          <HighlightedRewrite text={result.rewritten_text} issues={result.issues} />
         </div>
       </div>
 
       <div className="panel">
+        <p className="eyebrow">детали</p>
         <h2 className="section-title">Замечания</h2>
         {result.issues.length === 0 ? (
           <p className="text-slate-600 dark:text-slate-300">Автоматическая проверка не нашла слов из зоны риска.</p>
@@ -127,6 +164,7 @@ function ResultView({ result }) {
       </div>
 
       <div className="panel">
+        <p className="eyebrow">summary</p>
         <h2 className="section-title">Краткое резюме</h2>
         <p className="text-slate-700 dark:text-slate-200">{result.summary}</p>
       </div>
@@ -213,15 +251,16 @@ export default function App() {
 
   return (
     <div className={dark ? "dark" : ""}>
-      <main className="min-h-screen bg-sky-50/40 text-slate-950 transition-colors dark:bg-slate-950 dark:text-white">
+      <main className="min-h-screen bg-[#f5f5f2] text-[#1a1a18] transition-colors dark:bg-[#121512] dark:text-[#f4f4ee]">
         <header className="site-header">
           <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5">
             <div>
-              <h1 className="font-serif text-5xl leading-none tracking-normal text-slate-950 dark:text-white">СтопСлово</h1>
-              <p className="mt-2 text-sm font-medium text-slate-600 dark:text-sky-100/80">Автоматическая оценка риска для рекламных текстов</p>
+              <p className="eyebrow mb-2 text-[#4a7c10] dark:text-[#a8d86f]">compliance scanner</p>
+              <h1 className="text-[32px] font-semibold leading-tight tracking-normal text-[#1a1a18] dark:text-[#f4f4ee]">СтопСлово</h1>
+              <p className="mt-2 text-sm font-medium text-[#7a7a70] dark:text-[#b8b8ad]">Автоматическая оценка риска для рекламных текстов</p>
             </div>
             <div className="flex items-center gap-3">
-              <span className="hidden rounded-md border border-sky-200 bg-white/65 px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm dark:border-sky-800/70 dark:bg-slate-950/35 dark:text-sky-100 sm:inline-flex">
+              <span className="hidden rounded-full border border-[#c8c8c0] bg-[#f0f0ec] px-3 py-1.5 font-mono text-xs font-medium text-[#7a7a70] dark:border-[#3a453b] dark:bg-[#1b211c] dark:text-[#b8b8ad] sm:inline-flex">
                 149-ФЗ · рекламные тексты
               </span>
               <button className="icon-button header-theme-button" onClick={() => setDark((value) => !value)} title="Переключить тему">

@@ -4,8 +4,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        serif: ["Instrument Serif", "serif"],
-        sans: ["Inter", "system-ui", "sans-serif"]
+        mono: ["JetBrains Mono", "monospace"],
+        sans: ["Golos Text", "system-ui", "sans-serif"]
       },
       colors: {
         accent: {
