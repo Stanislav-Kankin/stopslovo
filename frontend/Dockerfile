@@ -3,7 +3,7 @@ FROM node:22-alpine AS build
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
 COPY index.html vite.config.js tailwind.config.js postcss.config.js ./
 COPY src ./src
