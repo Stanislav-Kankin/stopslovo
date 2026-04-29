@@ -1,6 +1,7 @@
 import argparse
 import json
 import re
+import sqlite3
 import tempfile
 import zipfile
 from collections import defaultdict
@@ -12,10 +13,19 @@ from pypdf import PdfReader
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = ROOT / "app" / "data" / "ran_lexicon.json"
+DEFAULT_SQLITE = ROOT / "app" / "data" / "lexicon.sqlite"
 SOURCE_ALIASES = {
     "orfograficheskij_slovar.pdf": "orthographic",
     "slovar_inostr_slov.pdf": "foreign",
     "orfoepicheskij_slovar.pdf": "orthoepic",
+    "tolkovyj_slovar_chast1_A-N.pdf": "explanatory",
+    "tolkovyj_slovar_chast2_O-Ja.pdf": "explanatory",
+}
+SOURCE_TITLES = {
+    "orthographic": "Орфографический словарь русского языка как государственного языка РФ",
+    "orthoepic": "Орфоэпический словарь русского языка как государственного языка РФ",
+    "foreign": "Словарь иностранных слов",
+    "explanatory": "Толковый словарь государственного языка Российской Федерации",
 }
 CYRILLIC_WORD_RE = re.compile(r"^[а-яё][а-яё-]{1,}$", re.IGNORECASE)
 NOISE_WORDS = {
@@ -124,15 +134,91 @@ def build(source: Path, output: Path, max_pages: int | None = None) -> dict:
     return data
 
 
+def write_sqlite(data: dict, sqlite_path: Path) -> None:
+    sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+    if sqlite_path.exists():
+        sqlite_path.unlink()
+
+    connection = sqlite3.connect(sqlite_path)
+    try:
+        connection.execute("PRAGMA journal_mode=OFF")
+        connection.execute("PRAGMA synchronous=OFF")
+        connection.execute(
+            """
+            CREATE TABLE meta (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE sources (
+                code TEXT PRIMARY KEY,
+                title TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE words (
+                word TEXT PRIMARY KEY
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE word_sources (
+                word TEXT NOT NULL,
+                source TEXT NOT NULL,
+                PRIMARY KEY (word, source),
+                FOREIGN KEY (word) REFERENCES words(word),
+                FOREIGN KEY (source) REFERENCES sources(code)
+            )
+            """
+        )
+        connection.executemany(
+            "INSERT INTO meta(key, value) VALUES (?, ?)",
+            [
+                ("version", data["version"]),
+                ("updated", data["updated"]),
+                ("description", data["description"]),
+                ("entries", str(len(data["entries"]))),
+                ("stats", json.dumps(data["stats"], ensure_ascii=False)),
+            ],
+        )
+        sources = sorted({source for entry in data["entries"] for source in entry["sources"]})
+        connection.executemany(
+            "INSERT INTO sources(code, title) VALUES (?, ?)",
+            [(source, SOURCE_TITLES.get(source, source)) for source in sources],
+        )
+        connection.executemany("INSERT INTO words(word) VALUES (?)", [(entry["word"],) for entry in data["entries"]])
+        connection.executemany(
+            "INSERT INTO word_sources(word, source) VALUES (?, ?)",
+            [(entry["word"], source) for entry in data["entries"] for source in entry["sources"]],
+        )
+        connection.execute("CREATE INDEX idx_word_sources_source ON word_sources(source)")
+        connection.commit()
+    finally:
+        connection.close()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build compact RAN lexicon JSON from dictionary PDFs")
     parser.add_argument("source", type=Path, help="Path to Archive zip, PDF, or directory with PDFs")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--sqlite-output", type=Path, default=DEFAULT_SQLITE)
+    parser.add_argument("--no-json", action="store_true", help="Build SQLite only")
     parser.add_argument("--max-pages", type=int, default=None, help="Debug limit")
     args = parser.parse_args()
 
     data = build(args.source, args.output, args.max_pages)
-    print(f"Wrote {args.output}")
+    write_sqlite(data, args.sqlite_output)
+    if args.no_json and args.output.exists():
+        args.output.unlink()
+    else:
+        print(f"Wrote {args.output}")
+    print(f"Wrote {args.sqlite_output}")
     print(f"Entries: {len(data['entries'])}")
     for item in data["stats"]:
         print(f"{item['file']}: {item['words']} words from {item['pages']} pages")
