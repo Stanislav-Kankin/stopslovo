@@ -141,8 +141,20 @@ class LLMAnalyzer:
                 return self._attach_sources(self._analyze_with_deepseek(text, context_type, flagged), flagged)
             except Exception as exc:
                 logger.exception("%s analysis failed: %s", self.provider, exc)
-                return self._fallback(text, context_type, flagged, llm_failed=True)
+                return self._fallback(text, context_type, flagged, llm_failed=True, llm_error=self._public_error(exc))
         return self._fallback(text, context_type, flagged)
+
+    def status(self) -> dict[str, Any]:
+        key = self.anthropic_api_key if self.provider == "anthropic" else self.deepseek_api_key
+        return {
+            "provider": self.provider,
+            "configured": self._has_provider_key(),
+            "model": self.anthropic_model if self.provider == "anthropic" else self.deepseek_model,
+            "base_url": None if self.provider == "anthropic" else self.deepseek_base_url,
+            "key_hint": self._key_hint(key),
+            "max_text_chars": self.max_text_chars,
+            "max_flagged_terms": self.max_flagged_terms,
+        }
 
     def _llm_skip_reason(self, text: str, flagged: list[dict], use_llm: bool) -> str | None:
         if not use_llm:
@@ -178,7 +190,7 @@ class LLMAnalyzer:
         }
 
     def _analyze_with_deepseek(self, text: str, context_type: str, flagged: list[dict]) -> dict[str, Any]:
-        client = OpenAI(api_key=self.deepseek_api_key, base_url=self.deepseek_base_url)
+        client = OpenAI(api_key=self.deepseek_api_key, base_url=self.deepseek_base_url, timeout=30)
         payload = self._payload(text, context_type, flagged)
         completion = client.chat.completions.create(
             model=self.deepseek_model,
@@ -206,12 +218,23 @@ class LLMAnalyzer:
         return self._parse_response(content)
 
     def _parse_response(self, content: str) -> dict[str, Any]:
-        if "---SUMMARY---" not in content:
-            raise ValueError("DeepSeek response is missing summary delimiter")
-        json_part, summary = content.split("---SUMMARY---", 1)
-        data = json.loads(json_part.strip())
+        if "---SUMMARY---" in content:
+            json_part, summary = content.split("---SUMMARY---", 1)
+            data = json.loads(self._extract_json(json_part))
+            summary_text = summary.strip()
+        else:
+            data = json.loads(self._extract_json(content))
+            summary_text = data.get("summary", "")
         data["issues"] = self._dedupe_issues(data.get("issues", []))
-        data["summary"] = self._ensure_disclaimer(self._localize_summary(summary.strip()))
+        if not summary_text:
+            summary_text = self._summary(
+                data.get("issues", []),
+                data.get("overall_risk", "safe"),
+                bool(data.get("manual_review_required")),
+                llm_failed=False,
+                skip_reason=None,
+            )
+        data["summary"] = self._ensure_disclaimer(self._localize_summary(summary_text))
         return data
 
     def _fallback(
@@ -221,6 +244,7 @@ class LLMAnalyzer:
         flagged: list[dict],
         llm_failed: bool = False,
         skip_reason: str | None = None,
+        llm_error: str | None = None,
     ) -> dict[str, Any]:
         issues = [
             {
@@ -240,7 +264,7 @@ class LLMAnalyzer:
         rewritten = self._rewrite(text, issues)
         overall = self.scorer.score(issues)
         manual, reason = self.scorer.needs_manual_review(context_type, issues)
-        summary = self._summary(issues, overall, manual, llm_failed, skip_reason)
+        summary = self._summary(issues, overall, manual, llm_failed, skip_reason, llm_error)
         return {
             "overall_risk": overall,
             "issues": issues,
@@ -310,7 +334,37 @@ class LLMAnalyzer:
             rewritten = re.sub(rf"\b{re.escape(issue['term'])}\b", replacement, rewritten, flags=re.IGNORECASE)
         return rewritten
 
-    def _summary(self, issues: list[dict], overall: str, manual: bool, llm_failed: bool, skip_reason: str | None) -> str:
+    @staticmethod
+    def _extract_json(content: str) -> str:
+        cleaned = content.strip()
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
+            cleaned = re.sub(r"\s*```$", "", cleaned)
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            raise ValueError("LLM response does not contain a JSON object")
+        return cleaned[start : end + 1]
+
+    @staticmethod
+    def _key_hint(key: str | None) -> str | None:
+        if not key:
+            return None
+        if len(key) <= 10:
+            return "***"
+        return f"{key[:5]}...{key[-4:]}"
+
+    @staticmethod
+    def _public_error(exc: Exception) -> str:
+        status_code = getattr(exc, "status_code", None)
+        if status_code:
+            return f"HTTP {status_code}"
+        message = str(exc).strip()
+        if not message:
+            return exc.__class__.__name__
+        return message[:240]
+
+    def _summary(self, issues: list[dict], overall: str, manual: bool, llm_failed: bool, skip_reason: str | None, llm_error: str | None = None) -> str:
         risk_label = RISK_LABELS.get(overall, overall)
         if not issues:
             base = f"Проблемных слов не найдено, общий риск: {risk_label}."
@@ -318,7 +372,8 @@ class LLMAnalyzer:
             critical = ", ".join(issue["term"] for issue in issues if issue["risk"] in {"high", "medium"})
             base = f"Найдено замечаний: {len(issues)}, общий риск: {risk_label}. Наиболее важные слова: {critical or 'нет'}."
         review = "Ручная проверка требуется." if manual else "Ручная проверка не требуется по автоматическим правилам."
-        fail_note = f" Нейросетевой анализ через {self.provider} недоступен, использована локальная проверка." if llm_failed else ""
+        error_note = f" Причина: {llm_error}." if llm_failed and llm_error else ""
+        fail_note = f" Нейросетевой анализ через {self.provider} недоступен, использована локальная проверка.{error_note}" if llm_failed else ""
         skip_note = f" Нейросетевой разбор не запускался: {skip_reason}" if skip_reason and issues else ""
         return self._ensure_disclaimer(f"{base} {review}{fail_note}{skip_note}")
 

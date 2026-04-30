@@ -122,6 +122,11 @@ def check_batch(
     return {"items": [process_request(item) for item in payload.items]}
 
 
+@router.get("/llm/status")
+def llm_status() -> dict:
+    return llm.status()
+
+
 @router.get("/{result_id}", response_model=CheckTextResponse)
 def get_result(result_id: str) -> dict:
     result = RESULTS.get(result_id)
