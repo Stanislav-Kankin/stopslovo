@@ -120,7 +120,7 @@ No markdown, no explanation outside this structure.
 
 class LLMAnalyzer:
     def __init__(self) -> None:
-        self.provider = os.getenv("LLM_PROVIDER") or ("anthropic" if os.getenv("ANTHROPIC_API_KEY") else "deepseek")
+        self.provider = os.getenv("LLM_PROVIDER", "deepseek").strip().lower()
         self.deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
         self.deepseek_model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
         self.deepseek_base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
