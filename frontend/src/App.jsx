@@ -6,6 +6,7 @@ import { BatchSummary } from "./components/BatchSummary";
 import { Footer } from "./components/Footer";
 import { QuotaWidget } from "./components/QuotaWidget";
 import { Admin } from "./pages/Admin";
+import { AllowlistAdmin } from "./pages/AllowlistAdmin";
 import { Login } from "./pages/Login";
 import { Pricing } from "./pages/Pricing";
 import { Register } from "./pages/Register";
@@ -863,6 +864,7 @@ export default function App() {
             <Route path="/pricing" element={<Pricing user={user} />} />
             <Route path="/terms" element={<Terms />} />
             <Route path="/admin" element={<Admin user={user} />} />
+            <Route path="/admin/allowlist" element={<AllowlistAdmin user={user} />} />
           </Routes>
         </div>
         <Footer />

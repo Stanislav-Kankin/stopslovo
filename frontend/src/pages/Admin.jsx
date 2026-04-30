@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 const planLabels = {
   free: "Бесплатный",
@@ -108,6 +109,7 @@ export function Admin({ user }) {
             />
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <button className="primary-button" onClick={saveAllowlist}>Сохранить белый список</button>
+              <Link className="secondary-button" to="/admin/allowlist">Посмотреть белый список</Link>
               {allowlistSaved && <span className="text-sm text-emerald-700 dark:text-emerald-300">{allowlistSaved}</span>}
             </div>
           </div>
