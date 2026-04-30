@@ -522,7 +522,10 @@ function HomePage({ me, refreshMe }) {
     setError("");
     try {
       const data = await postJson("/api/v1/check/refine", { text: sourceRow.original_text, context_type: DEFAULT_CONTEXT, issue: sourceIssue });
-      const refinedIssue = markAiRefined(data.issue, data.llm_explanation || data.summary);
+      const refinedIssue = {
+        ...markAiRefined(data.issue, data.llm_explanation || data.summary),
+        sort_risk: term.sort_risk || term.risk
+      };
       setBatchResults((rows) =>
         rows.map((row) => {
           if (!row.issues.some((issue) => issueKey(issue) === targetKey)) return row;

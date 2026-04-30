@@ -30,6 +30,7 @@ export function aggregateByTerm(results) {
           normalized: issue.normalized,
           category: issue.category,
           risk: issue.risk,
+          sort_risk: issue.sort_risk || issue.risk,
           replacements: issue.replacements || [],
           sources: issue.sources || [],
           ai_refined: Boolean(issue.ai_refined),
@@ -48,6 +49,9 @@ export function aggregateByTerm(results) {
       if (riskWeight[issue.risk] > riskWeight[map[key].risk]) {
         map[key].risk = issue.risk;
       }
+      if (riskWeight[issue.sort_risk || issue.risk] > riskWeight[map[key].sort_risk]) {
+        map[key].sort_risk = issue.sort_risk || issue.risk;
+      }
       if (!map[key].replacements.length && issue.replacements?.length) {
         map[key].replacements = issue.replacements;
       }
@@ -57,7 +61,7 @@ export function aggregateByTerm(results) {
       }
     }
   }
-  return Object.values(map).sort((a, b) => riskWeight[b.risk] - riskWeight[a.risk] || b.count - a.count);
+  return Object.values(map).sort((a, b) => riskWeight[b.sort_risk || b.risk] - riskWeight[a.sort_risk || a.risk] || b.count - a.count);
 }
 
 export function BatchSummary({ results, selectedTerm, onSelectTerm, onDownloadXlsx, onDownloadCsv, onRefineTerm, refiningTerm, canUseAi, aiUnavailableReason }) {
