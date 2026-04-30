@@ -341,7 +341,7 @@ function HomePage({ me, refreshMe }) {
       const collected = [];
       for (let index = 0; index < chunks.length; index += 1) {
         const data = await postJson("/api/v1/check/batch", {
-          items: chunks[index].map((item) => ({ ...item, context_type: DEFAULT_CONTEXT, use_llm: false, excluded_terms: excludedTerms }))
+          items: chunks[index].map((item) => ({ ...item, context_type: DEFAULT_CONTEXT, use_llm: true, excluded_terms: excludedTerms }))
         });
         collected.push(...data.items);
         setBatchResults([...collected]);
@@ -349,6 +349,7 @@ function HomePage({ me, refreshMe }) {
         await refreshMe();
       }
       setProgress(100);
+      await refreshMe();
     } catch (err) {
       setError(err.message);
       setProgress(0);

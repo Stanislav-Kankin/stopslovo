@@ -12,11 +12,12 @@ function formatLimit(value) {
 
 function Meter({ label, used, limit }) {
   const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 100;
+  const remaining = limit < 0 ? -1 : Math.max((limit || 0) - (used || 0), 0);
   return (
     <div className="grid gap-2">
       <div className="flex items-center justify-between gap-3 text-sm font-medium text-[#65655d] dark:text-[#c1d0cc]">
         <span>{label}</span>
-        <span>{formatLimit(used)} / {formatLimit(limit)}</span>
+        <span>осталось {formatLimit(remaining)} / {formatLimit(limit)}</span>
       </div>
       <div className="h-3 overflow-hidden rounded-full border border-[#cbd0c2] bg-[#dfe3d8] shadow-inner dark:border-[#3b5361] dark:bg-[#2a3c4a]">
         <div
@@ -37,8 +38,8 @@ export function QuotaWidget({ user }) {
           <p className="eyebrow">лимиты</p>
           <p className="text-base font-semibold leading-tight text-[#1a1a18] dark:text-[#f4f7f2]">{planLabels[user.plan] || user.plan}</p>
         </div>
-        <Meter label="Слова в месяц" used={user.chars_used ?? 0} limit={user.chars_limit ?? 0} />
-        <Meter label="Строки файлов в месяц" used={user.rows_used ?? 0} limit={user.rows_limit ?? 0} />
+        <Meter label="Лимит слов" used={user.chars_used ?? 0} limit={user.chars_limit ?? 0} />
+        <Meter label="Лимит строк файлов" used={user.rows_used ?? 0} limit={user.rows_limit ?? 0} />
       </div>
     </section>
   );
