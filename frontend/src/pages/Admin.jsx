@@ -5,7 +5,8 @@ const planLabels = {
   free: "Бесплатный",
   freelancer: "Фрилансер",
   agency_s: "Агентство S",
-  agency_m: "Агентство M"
+  agency_m: "Агентство M",
+  one_time: "Разовая проверка"
 };
 
 export function Admin({ user }) {

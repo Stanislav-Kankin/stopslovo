@@ -60,7 +60,7 @@ export function aggregateByTerm(results) {
   return Object.values(map).sort((a, b) => riskWeight[b.risk] - riskWeight[a.risk] || b.count - a.count);
 }
 
-export function BatchSummary({ results, selectedTerm, onSelectTerm, onDownloadXlsx, onDownloadCsv, onRefineTerm, refiningTerm }) {
+export function BatchSummary({ results, selectedTerm, onSelectTerm, onDownloadXlsx, onDownloadCsv, onRefineTerm, refiningTerm, canUseAi, aiUnavailableReason }) {
   const terms = aggregateByTerm(results);
   const adsWithIssues = results.filter((item) => item.issues.length > 0).length;
 
@@ -118,16 +118,20 @@ export function BatchSummary({ results, selectedTerm, onSelectTerm, onDownloadXl
                     </span>
                   )}
                 </span>
-                <button
-                  className="secondary-button text-xs"
-                  disabled={refiningTerm === termKey}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onRefineTerm?.(term);
-                  }}
-                >
-                  {refiningTerm === termKey ? "Уточняем..." : "Уточнить ИИ"}
-                </button>
+                {canUseAi ? (
+                  <button
+                    className="secondary-button text-xs"
+                    disabled={refiningTerm === termKey}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onRefineTerm?.(term);
+                    }}
+                  >
+                    {refiningTerm === termKey ? "Уточняем..." : "Уточнить ИИ"}
+                  </button>
+                ) : (
+                  <span className="text-xs text-slate-500 dark:text-slate-400">{aiUnavailableReason}</span>
+                )}
               </div>
             );
           })}

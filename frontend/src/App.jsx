@@ -12,6 +12,7 @@ import { Pricing } from "./pages/Pricing";
 import { Register } from "./pages/Register";
 import { Terms } from "./pages/Terms";
 import { toCsv } from "./utils/csv";
+import { humanizeApiError } from "./utils/errors";
 import { exportResultsXlsx } from "./utils/exportResults";
 import { importRowsFromFile } from "./utils/importRows";
 
@@ -69,6 +70,23 @@ async function writeSavedState(key, value) {
   }
 }
 
+async function deleteSavedState(key) {
+  try {
+    const db = await openStateDb();
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction(HOME_STATE_STORE, "readwrite");
+      transaction.objectStore(HOME_STATE_STORE).delete(key);
+      transaction.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      transaction.onerror = () => reject(transaction.error);
+    });
+  } catch {
+    // Clearing cached workspace is best-effort.
+  }
+}
+
 function readBooleanPreference(key, fallback = false) {
   try {
     const value = localStorage.getItem(key);
@@ -115,7 +133,7 @@ async function parseResponse(response) {
   }
   if (!response.ok) {
     const detail = data?.detail || data;
-    const message = detail?.message || detail?.detail || text || "Ошибка запроса";
+    const message = humanizeApiError({ message: text, payload: detail });
     const error = new Error(message);
     error.payload = detail;
     throw error;
@@ -244,7 +262,7 @@ function HighlightedRewrite({ text, issues }) {
   );
 }
 
-function ResultView({ result, onRefineIssue, refiningIssue }) {
+function ResultView({ result, onRefineIssue, refiningIssue, canUseAi, aiUnavailableReason }) {
   const [copied, setCopied] = useState(false);
   if (!result) return null;
   const issues = uniqueIssues(result.issues);
@@ -320,13 +338,17 @@ function ResultView({ result, onRefineIssue, refiningIssue }) {
                     Источники: {issue.sources.join("; ")}
                   </p>
                 )}
-                <button
-                  className="secondary-button mt-3 text-sm"
-                  disabled={refiningIssue === issueKey(issue)}
-                  onClick={() => onRefineIssue?.(issue)}
-                >
-                  {refiningIssue === issueKey(issue) ? "Уточняем..." : "Уточнить через ИИ"}
-                </button>
+                {canUseAi ? (
+                  <button
+                    className="secondary-button mt-3 text-sm"
+                    disabled={refiningIssue === issueKey(issue)}
+                    onClick={() => onRefineIssue?.(issue)}
+                  >
+                    {refiningIssue === issueKey(issue) ? "Уточняем..." : "Уточнить через ИИ"}
+                  </button>
+                ) : (
+                  <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{aiUnavailableReason}</p>
+                )}
               </article>
             ))}
           </div>
@@ -380,6 +402,11 @@ function HomePage({ me, refreshMe }) {
   const visibleResults = sortedResults.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const currentUser = me?.authenticated ? me.user : null;
   const rowsRemaining = currentUser?.rows_remaining;
+  const aiRemaining = currentUser?.ai_remaining;
+  const canUseAi = Boolean(currentUser) && (aiRemaining === -1 || (typeof aiRemaining === "number" && aiRemaining > 0));
+  const aiUnavailableReason = !currentUser
+    ? "ИИ-подсказки доступны после входа."
+    : "Лимит ИИ-подсказок на бесплатном тарифе исчерпан.";
 
   useEffect(() => {
     let active = true;
@@ -647,7 +674,7 @@ function HomePage({ me, refreshMe }) {
             </div>
           </section>
           {error && <div className="error-box">{error}</div>}
-        <ResultView result={result} onRefineIssue={refineSingleIssue} refiningIssue={refiningIssue} />
+        <ResultView result={result} onRefineIssue={refineSingleIssue} refiningIssue={refiningIssue} canUseAi={canUseAi} aiUnavailableReason={aiUnavailableReason} />
         </>
       ) : (
         <section className="space-y-5">
@@ -695,6 +722,8 @@ function HomePage({ me, refreshMe }) {
             onDownloadCsv={exportCsv}
             onRefineTerm={refineBatchTerm}
             refiningTerm={refiningIssue}
+            canUseAi={canUseAi}
+            aiUnavailableReason={aiUnavailableReason}
           />
 
           {batchResults.length > 0 && (
@@ -821,7 +850,14 @@ export default function App() {
 
   const logout = async () => {
     await postJson("/api/auth/logout", {});
-    await refreshMe();
+    await deleteSavedState(HOME_STATE_KEY);
+    try {
+      sessionStorage.clear();
+    } catch {
+      // Ignore storage failures on logout.
+    }
+    setMe({ authenticated: false, plan: "anon" });
+    window.location.replace("/");
   };
 
   const user = me?.authenticated ? me.user : null;

@@ -27,3 +27,4 @@ class UsageRecord(SQLModel, table=True):
     month: str
     chars_used: int = 0
     rows_used: int = 0
+    ai_used: int = 0

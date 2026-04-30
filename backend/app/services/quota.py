@@ -6,11 +6,12 @@ from app.models.user import UsageRecord
 
 
 PLAN_LIMITS = {
-    "anon": {"chars_per_month": 1_000, "rows_per_month": 100, "one_time": True},
-    "free": {"chars_per_month": 1_800, "rows_per_month": 200, "one_time": False},
-    "freelancer": {"chars_per_month": 10_000, "rows_per_month": 5_000, "one_time": False},
-    "agency_s": {"chars_per_month": 120_000, "rows_per_month": 50_000, "one_time": False},
-    "agency_m": {"chars_per_month": -1, "rows_per_month": -1, "one_time": False},
+    "anon": {"chars_per_month": 1_000, "rows_per_month": 100, "ai_per_month": 0, "one_time": True},
+    "free": {"chars_per_month": 1_800, "rows_per_month": 200, "ai_per_month": 5, "one_time": False},
+    "freelancer": {"chars_per_month": 10_000, "rows_per_month": 5_000, "ai_per_month": -1, "one_time": False},
+    "agency_s": {"chars_per_month": 120_000, "rows_per_month": 50_000, "ai_per_month": -1, "one_time": False},
+    "agency_m": {"chars_per_month": -1, "rows_per_month": -1, "ai_per_month": -1, "one_time": False},
+    "one_time": {"chars_per_month": 5_000, "rows_per_month": 2_000, "ai_per_month": -1, "one_time": True},
 }
 
 
@@ -50,6 +51,18 @@ def check_quota(session: Session, user_id: str, plan: str, chars: int = 0, rows:
     return True
 
 
+def check_ai_quota(session: Session, user_id: str, plan: str, amount: int = 1) -> bool:
+    limits = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"])
+    record = get_or_create_usage(session, user_id, plan)
+    ai_limit = limits["ai_per_month"]
+    if ai_limit >= 0 and record.ai_used + amount > ai_limit:
+        return False
+    record.ai_used += amount
+    session.add(record)
+    session.commit()
+    return True
+
+
 def get_remaining(session: Session, user_id: str, plan: str) -> dict:
     limits = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"])
     record = get_or_create_usage(session, user_id, plan)
@@ -60,8 +73,11 @@ def get_remaining(session: Session, user_id: str, plan: str) -> dict:
     return {
         "chars_used": record.chars_used,
         "rows_used": record.rows_used,
+        "ai_used": record.ai_used,
         "chars_limit": limits["chars_per_month"],
         "rows_limit": limits["rows_per_month"],
+        "ai_limit": limits["ai_per_month"],
         "chars_remaining": remaining(limits["chars_per_month"], record.chars_used),
         "rows_remaining": remaining(limits["rows_per_month"], record.rows_used),
+        "ai_remaining": remaining(limits["ai_per_month"], record.ai_used),
     }

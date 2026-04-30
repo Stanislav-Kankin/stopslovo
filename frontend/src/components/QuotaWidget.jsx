@@ -3,7 +3,8 @@ const planLabels = {
   free: "Бесплатный",
   freelancer: "Фрилансер",
   agency_s: "Агентство S",
-  agency_m: "Агентство M"
+  agency_m: "Агентство M",
+  one_time: "Разовая проверка"
 };
 
 function formatLimit(value) {
@@ -33,13 +34,14 @@ export function QuotaWidget({ user }) {
   if (!user) return null;
   return (
     <section className="border-b border-[#e0e0da] bg-[#f7f7f4]/85 px-4 py-4 dark:border-[#38505c] dark:bg-[#1d2a34]/75">
-      <div className="mx-auto grid max-w-6xl gap-4 md:grid-cols-[260px_1fr_1fr] md:items-center">
+      <div className="mx-auto grid max-w-6xl gap-4 md:grid-cols-[220px_1fr_1fr_1fr] md:items-center">
         <div>
           <p className="eyebrow">лимиты</p>
           <p className="text-base font-semibold leading-tight text-[#1a1a18] dark:text-[#f4f7f2]">{planLabels[user.plan] || user.plan}</p>
         </div>
         <Meter label="Лимит слов" used={user.chars_used ?? 0} limit={user.chars_limit ?? 0} />
         <Meter label="Лимит строк файлов" used={user.rows_used ?? 0} limit={user.rows_limit ?? 0} />
+        <Meter label="ИИ-подсказки" used={user.ai_used ?? 0} limit={user.ai_limit ?? 0} />
       </div>
     </section>
   );

@@ -15,7 +15,7 @@ from app.services.latin_detector import LatinDetector
 from app.services.llm_analyzer import LLMAnalyzer
 from app.services.morpho_normalizer import MorphoNormalizer
 from app.services.preprocessor import TextPreprocessor
-from app.services.quota import check_quota
+from app.services.quota import check_ai_quota, check_quota
 from app.services.ran_lexicon import RanLexicon
 from app.services.report_generator import ReportGenerator
 
@@ -77,6 +77,17 @@ def _quota_error() -> JSONResponse:
     )
 
 
+def _ai_quota_error(status_code: int = 402) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "error": "ai_quota_exceeded",
+            "message": "ИИ-подсказки недоступны на текущем тарифе или лимит на этот месяц исчерпан.",
+            "upgrade_url": "/pricing",
+        },
+    )
+
+
 def _word_count(text: str) -> int:
     return len(re.findall(r"[\wА-Яа-яЁё-]+", text, flags=re.UNICODE))
 
@@ -116,10 +127,17 @@ def check_text(
     response: Response,
     session: Session = Depends(get_session),
 ) -> dict | JSONResponse:
+    user = get_user_from_request(request, session)
     user_id, plan = _quota_identity(request, response, session)
     if not check_quota(session, user_id, plan, chars=_word_count(payload.text), rows=0):
         return _quota_error()
-    return process_request(payload)
+    effective_payload = payload
+    if payload.use_llm:
+        if not user:
+            effective_payload = payload.model_copy(update={"use_llm": False})
+        elif not check_ai_quota(session, user.id, _active_plan(user)):
+            effective_payload = payload.model_copy(update={"use_llm": False})
+    return process_request(effective_payload)
 
 
 @router.post("/batch", response_model=CheckBatchResponse)
@@ -147,7 +165,12 @@ def refine_issue(
     response: Response,
     session: Session = Depends(get_session),
 ) -> dict | JSONResponse:
-    user_id, plan = _quota_identity(request, response, session)
+    user = get_user_from_request(request, session)
+    if not user:
+        return _ai_quota_error(status_code=401)
+    user_id, plan = user.id, _active_plan(user)
+    if not check_ai_quota(session, user_id, plan):
+        return _ai_quota_error()
     if not check_quota(session, user_id, plan, chars=_word_count(payload.text), rows=0):
         return _quota_error()
     clean_text = preprocessor.clean(payload.text)

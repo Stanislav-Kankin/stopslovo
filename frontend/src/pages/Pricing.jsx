@@ -21,7 +21,7 @@ const plans = [
     id: "one_time",
     name: "Разовая проверка",
     price: "490 ₽/файл",
-    features: ["Один файл", "Без подписки", "Подходит для первой проверки", "Отчёт XLSX / CSV"]
+    features: ["Один файл до 2 000 строк", "До 5 000 слов в режиме текста", "ИИ-подсказки без лимита в рамках услуги", "Отчёт XLSX / CSV"]
   }
 ];
 
@@ -29,7 +29,8 @@ const planLabels = {
   free: "Бесплатный",
   freelancer: "Фрилансер",
   agency_s: "Агентство S",
-  agency_m: "Агентство M"
+  agency_m: "Агентство M",
+  one_time: "Разовая проверка"
 };
 
 export function Pricing({ user }) {
