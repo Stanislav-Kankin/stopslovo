@@ -197,6 +197,14 @@ function replaceIssue(issues = [], refined) {
   return replaced ? next : [...next, refined];
 }
 
+function markAiRefined(issue, summary = "") {
+  return {
+    ...issue,
+    ai_refined: true,
+    ai_summary: summary
+  };
+}
+
 function HighlightedText({ text, issues }) {
   const terms = uniqueIssues(issues).filter((issue) => ["high", "medium"].includes(issue.risk)).map((issue) => issue.term);
   if (!terms.length) return <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">{text}</p>;
@@ -292,9 +300,19 @@ function ResultView({ result, onRefineIssue, refiningIssue }) {
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <strong className="text-slate-950 dark:text-white">{issue.term}</strong>
                   <RiskBadge risk={issue.risk} />
+                  {issue.ai_refined && (
+                    <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-100">
+                      Уточнено ИИ
+                    </span>
+                  )}
                   <span className="text-sm text-slate-500 dark:text-slate-400">{issue.normalized}</span>
                 </div>
                 <p className="text-sm text-slate-600 dark:text-slate-300">{issue.reason}</p>
+                {issue.ai_refined && issue.ai_summary && (
+                  <p className="mt-2 rounded-md border border-sky-100 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-100">
+                    Вывод ИИ: {localizeSystemText(issue.ai_summary)}
+                  </p>
+                )}
                 {issue.replacements.length > 0 && <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">Замены: {issue.replacements.join(", ")}</p>}
                 {issue.sources?.length > 0 && (
                   <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
@@ -447,9 +465,10 @@ function HomePage({ me, refreshMe }) {
     setError("");
     try {
       const data = await postJson("/api/v1/check/refine", { text: result.original_text, context_type: DEFAULT_CONTEXT, issue });
+      const refinedIssue = markAiRefined(data.issue, data.summary);
       setResult((current) => ({
         ...current,
-        issues: replaceIssue(current.issues, data.issue),
+        issues: replaceIssue(current.issues, refinedIssue),
         rewritten_text: data.rewritten_text || current.rewritten_text,
         summary: data.summary || current.summary,
         manual_review_required: data.manual_review_required,
@@ -475,12 +494,13 @@ function HomePage({ me, refreshMe }) {
     setError("");
     try {
       const data = await postJson("/api/v1/check/refine", { text: sourceRow.original_text, context_type: DEFAULT_CONTEXT, issue: sourceIssue });
+      const refinedIssue = markAiRefined(data.issue, data.summary);
       setBatchResults((rows) =>
         rows.map((row) => {
           if (!row.issues.some((issue) => issueKey(issue) === targetKey)) return row;
           return {
             ...row,
-            issues: replaceIssue(row.issues, data.issue),
+            issues: replaceIssue(row.issues, refinedIssue),
             manual_review_required: data.manual_review_required || row.manual_review_required,
             manual_review_reason: data.manual_review_reason || row.manual_review_reason
           };
@@ -720,8 +740,18 @@ function HomePage({ me, refreshMe }) {
                                     <div className="flex flex-wrap items-center gap-2">
                                       <strong>{issue.term}</strong>
                                       <RiskBadge risk={issue.risk} />
+                                      {issue.ai_refined && (
+                                        <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-100">
+                                          Уточнено ИИ
+                                        </span>
+                                      )}
                                       {issue.replacements.length > 0 && <span className="text-slate-600 dark:text-slate-300">→ замены: {issue.replacements.join(", ")}</span>}
                                     </div>
+                                    {issue.ai_refined && issue.ai_summary && (
+                                      <p className="mt-2 rounded-md border border-sky-100 bg-sky-50 px-3 py-2 text-xs leading-relaxed text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-100">
+                                        Вывод ИИ: {localizeSystemText(issue.ai_summary)}
+                                      </p>
+                                    )}
                                     {issue.sources?.length > 0 && (
                                       <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                                         Источники: {issue.sources.join("; ")}

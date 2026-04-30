@@ -32,6 +32,8 @@ export function aggregateByTerm(results) {
           risk: issue.risk,
           replacements: issue.replacements || [],
           sources: issue.sources || [],
+          ai_refined: Boolean(issue.ai_refined),
+          ai_summary: issue.ai_summary || "",
           count: 0,
           ads: []
         };
@@ -48,6 +50,10 @@ export function aggregateByTerm(results) {
       }
       if (!map[key].replacements.length && issue.replacements?.length) {
         map[key].replacements = issue.replacements;
+      }
+      if (issue.ai_refined) {
+        map[key].ai_refined = true;
+        map[key].ai_summary = issue.ai_summary || map[key].ai_summary;
       }
     }
   }
@@ -93,12 +99,24 @@ export function BatchSummary({ results, selectedTerm, onSelectTerm, onDownloadXl
                 className={`grid w-full cursor-pointer grid-cols-1 gap-2 px-3 py-3 text-left text-sm transition md:grid-cols-[1fr_100px_80px_1.2fr_1.4fr_130px] md:gap-3 md:py-2 ${selected ? "bg-emerald-50 dark:bg-[#203c34]" : "hover:bg-slate-50 dark:hover:bg-[#1b2a34]"}`}
                 onClick={() => onSelectTerm(selected ? "" : term.normalized)}
               >
-                <strong>{term.term}</strong>
+                <div className="flex flex-wrap items-center gap-2">
+                  <strong>{term.term}</strong>
+                  {term.ai_refined && (
+                    <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-800 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-100">
+                      Уточнено
+                    </span>
+                  )}
+                </div>
                 <span>{riskLabels[term.risk] || term.risk}</span>
                 <span>{term.count}</span>
                 <span className="text-slate-600 dark:text-slate-300">{term.replacements.length ? term.replacements.join(", ") : "Проверить вручную"}</span>
                 <span className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                   {term.sources.length ? term.sources.join("; ") : "Источник не указан"}
+                  {term.ai_refined && term.ai_summary && (
+                    <span className="mt-1 block rounded-md border border-sky-100 bg-sky-50 px-2 py-1 text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-100">
+                      ИИ: {term.ai_summary}
+                    </span>
+                  )}
                 </span>
                 <button
                   className="secondary-button text-xs"
