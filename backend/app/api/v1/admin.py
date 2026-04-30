@@ -1,7 +1,10 @@
 import os
+import json
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 from sqlmodel import Session, func, select
 
 from app.api.v1.auth import get_current_user
@@ -11,6 +14,11 @@ from app.models.user import UsageRecord, User
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@admin.ru").lower()
+ALLOWLIST_PATH = Path(__file__).resolve().parents[2] / "data" / "global_allowlist.json"
+
+
+class AllowlistPayload(BaseModel):
+    terms: list[str] = Field(default_factory=list, max_length=2000)
 
 
 def require_admin(request: Request, session: Annotated[Session, Depends(get_session)]) -> User:
@@ -49,3 +57,44 @@ def overview(
             for user in recent_users
         ],
     }
+
+
+def _read_allowlist() -> list[str]:
+    if not ALLOWLIST_PATH.exists():
+        return []
+    try:
+        raw = json.loads(ALLOWLIST_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+    return [
+        " ".join(str(item).split())
+        for item in raw.get("terms", [])
+        if " ".join(str(item).split())
+    ]
+
+
+@router.get("/allowlist")
+def get_allowlist(_: Annotated[User, Depends(require_admin)]) -> dict:
+    return {"terms": _read_allowlist()}
+
+
+@router.put("/allowlist")
+def update_allowlist(
+    payload: AllowlistPayload,
+    _: Annotated[User, Depends(require_admin)],
+) -> dict:
+    ALLOWLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
+    seen: set[str] = set()
+    terms: list[str] = []
+    for raw_term in payload.terms:
+        term = " ".join(raw_term.split())
+        key = term.lower().replace("ё", "е")
+        if not term or key in seen:
+            continue
+        seen.add(key)
+        terms.append(term)
+    ALLOWLIST_PATH.write_text(
+        json.dumps({"terms": terms}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return {"terms": terms}

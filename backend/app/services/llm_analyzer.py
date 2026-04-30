@@ -30,6 +30,7 @@ You receive a JSON object:
 {
   "text": "<original text>",
   "context_type": "<реклама|карточка_товара|баннер|упаковка|сайт|презентация|b2b_документ>",
+  "analysis_mode": "full_text|single_term_refinement",
   "flagged_by_dictionary": [
     {
       "term": "<word as found in text>",
@@ -49,6 +50,42 @@ You receive a JSON object:
 4. Improve or confirm replacement suggestions - they must be natural Russian
 5. Rewrite the full text replacing HIGH and MEDIUM risk terms
 6. Return structured JSON, then delimiter, then Russian summary
+
+If analysis_mode is "single_term_refinement", focus on the supplied term only.
+Your main job is to decide whether the existing flag is justified. It is acceptable
+and often correct to downgrade the term to LOW or SAFE. Do not search for extra
+terms in this mode unless they are essential to explain the selected term.
+
+## LINGUISTIC TRIAGE BEFORE RISK
+
+Before assigning risk, classify why the term was flagged. Do not assume that every
+word missing from dictionaries is foreign.
+
+Downgrade to LOW or SAFE when the term is:
+- a Russian abbreviation or compressed compound made from Russian words:
+  "доппродажи" = "дополнительные продажи", "спеццена" = "специальная цена",
+  "господдержка" = "государственная поддержка", "медуслуги" = "медицинские услуги";
+- a normal Russian professional term that is Cyrillic and not a direct borrowing;
+- an inflected Russian word, typo-like spelling, or industry shorthand whose parts
+  are Russian and understandable;
+- a brand, product name, company name, marketplace name, or proper noun.
+
+Only keep HIGH/MEDIUM when there is clear evidence of a foreign borrowing or Latin
+term that has a common Russian equivalent. If the connection with a foreign word is
+only indirect or speculative, do not mark it HIGH.
+
+For Russian compressed compounds, use:
+- risk: "low" or "safe"
+- keep_as_is: true
+- replacements: []
+- reason: explain that this is a Russian abbreviation/compound, not an anglicism.
+
+Examples:
+- "доппродажи": SAFE/LOW, not "upsell"; it is a Russian shortened form of
+  "дополнительные продажи".
+- "лидогенерация": MEDIUM/HIGH may be acceptable because it is a borrowed marketing term.
+- "кейс": HIGH/MEDIUM in consumer advertising if it means "пример" or "ситуация".
+- "AI": MEDIUM/LOW depending on context; may be a technical abbreviation, not always a violation.
 
 ## RISK LEVELS
 
@@ -176,6 +213,7 @@ class LLMAnalyzer:
         return {
             "text": text,
             "context_type": context_type,
+            "analysis_mode": "single_term_refinement" if len(flagged) == 1 else "full_text",
             "flagged_by_dictionary": [
                 {
                     "term": item["term"],

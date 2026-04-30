@@ -9,6 +9,8 @@ const planLabels = {
 
 export function Admin({ user }) {
   const [data, setData] = useState(null);
+  const [allowlistText, setAllowlistText] = useState("");
+  const [allowlistSaved, setAllowlistSaved] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -21,7 +23,39 @@ export function Admin({ user }) {
       })
       .then(setData)
       .catch((err) => setError(err.message));
+    fetch("/api/admin/allowlist", { credentials: "include" })
+      .then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || "Не удалось загрузить белый список");
+        return payload;
+      })
+      .then((payload) => setAllowlistText((payload.terms || []).join("\n")))
+      .catch((err) => setError(err.message));
   }, [user]);
+
+  const saveAllowlist = async () => {
+    setError("");
+    setAllowlistSaved("");
+    try {
+      const terms = allowlistText
+        .split(/[\n,;]+/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const response = await fetch("/api/admin/allowlist", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ terms })
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || "Не удалось сохранить белый список");
+      setAllowlistText((payload.terms || []).join("\n"));
+      setAllowlistSaved(`Сохранено слов и фраз: ${(payload.terms || []).length}`);
+      setTimeout(() => setAllowlistSaved(""), 1800);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
 
   if (!user?.is_admin) {
     return (
@@ -57,6 +91,24 @@ export function Admin({ user }) {
                   <span key={item.plan}>{planLabels[item.plan] || item.plan}: {item.count}</span>
                 ))}
               </div>
+            </div>
+          </div>
+
+          <div className="panel">
+            <p className="eyebrow">словарь</p>
+            <h2 className="section-title">Общий белый список</h2>
+            <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
+              Слова и фразы отсюда не будут попадать в замечания у всех пользователей. Можно добавлять аббревиатуры, бренды, названия систем и спорные русские термины.
+            </p>
+            <textarea
+              className="input min-h-[160px] resize-y"
+              value={allowlistText}
+              onChange={(event) => setAllowlistText(event.target.value)}
+              placeholder="Например:&#10;РСЯ&#10;масштабироваться&#10;Grand Line"
+            />
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button className="primary-button" onClick={saveAllowlist}>Сохранить белый список</button>
+              {allowlistSaved && <span className="text-sm text-emerald-700 dark:text-emerald-300">{allowlistSaved}</span>}
             </div>
           </div>
 

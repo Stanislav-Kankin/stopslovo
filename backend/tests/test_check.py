@@ -94,3 +94,33 @@ def test_repeated_terms_are_reported_once_per_text() -> None:
     assert terms.count("grand") == 1
     assert terms.count("line") == 1
     assert terms.count("sale") == 1
+
+
+def test_russian_compressed_compounds_are_not_flagged_as_borrowings() -> None:
+    response = client.post(
+        "/api/v1/check/text",
+        json={
+            "text": "Доппродажи и спеццены для постоянных клиентов",
+            "context_type": "реклама",
+            "use_llm": False,
+        },
+    )
+    assert response.status_code == 200
+    terms = {issue["term"].lower() for issue in response.json()["issues"]}
+    assert "доппродажи" not in terms
+    assert "спеццены" not in terms
+
+
+def test_cyrillic_abbreviations_and_russian_derivatives_are_not_flagged() -> None:
+    response = client.post(
+        "/api/v1/check/text",
+        json={
+            "text": "РСЯ помогает масштабироваться в рекламе",
+            "context_type": "реклама",
+            "use_llm": False,
+        },
+    )
+    assert response.status_code == 200
+    terms = {issue["term"].lower() for issue in response.json()["issues"]}
+    assert "рся" not in terms
+    assert "масштабироваться" not in terms

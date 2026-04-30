@@ -98,7 +98,7 @@ def process_request(payload: CheckTextRequest) -> dict:
     clean_text = preprocessor.clean(payload.text)
     tokens = preprocessor.tokenize(clean_text)
     latin = latin_detector.detect(clean_text)
-    excluded_spans = _excluded_spans(clean_text, payload.excluded_terms)
+    excluded_spans = _excluded_spans(clean_text, payload.excluded_terms + dictionary.global_allowlist())
     if excluded_spans:
         tokens = [token for token in tokens if not _inside_spans(token, excluded_spans)]
         latin = [match for match in latin if not _inside_spans(match, excluded_spans)]
