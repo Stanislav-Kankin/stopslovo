@@ -180,7 +180,7 @@ class LLMAnalyzer:
                 {
                     "term": item["term"],
                     "normalized": item["normalized"],
-                    "script": item["script"],
+                    "script": item.get("script") or item.get("category", "missed_by_dictionary"),
                     "risk_base": item["risk"],
                     "known_replacements": item["replacements"],
                     "sources": item.get("sources", []),
@@ -364,6 +364,8 @@ class LLMAnalyzer:
                 return "HTTP 401: DeepSeek не принял API-ключ"
             if int(status_code) == 429:
                 return "HTTP 429: превышен лимит запросов DeepSeek"
+            if int(status_code) == 403:
+                return "HTTP 403: API-провайдер запретил запрос. Проверьте доступ к модели, billing/credits и регион аккаунта."
             return f"HTTP {status_code}"
         message = str(exc).strip()
         if not message:
