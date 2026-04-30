@@ -20,7 +20,7 @@ export function Admin({ user }) {
   const [error, setError] = useState("");
 
   const loadOverview = () => {
-    fetch("/api/admin/overview", { credentials: "include" })
+    fetch("/api/admin/overview", { credentials: "include", cache: "no-store" })
       .then(async (response) => {
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.detail || "Не удалось загрузить админку");
@@ -33,7 +33,7 @@ export function Admin({ user }) {
   useEffect(() => {
     if (!user?.is_admin) return;
     loadOverview();
-    fetch("/api/admin/allowlist", { credentials: "include" })
+    fetch("/api/admin/allowlist", { credentials: "include", cache: "no-store" })
       .then(async (response) => {
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.detail || "Не удалось загрузить белый список");
@@ -54,6 +54,7 @@ export function Admin({ user }) {
       const response = await fetch("/api/admin/allowlist", {
         method: "PUT",
         credentials: "include",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ terms })
       });

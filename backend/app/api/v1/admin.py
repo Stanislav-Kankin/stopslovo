@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlmodel import Session, func, select
 
@@ -107,7 +107,8 @@ def _read_allowlist() -> list[str]:
 
 
 @router.get("/allowlist")
-def get_allowlist(_: Annotated[User, Depends(require_admin)]) -> dict:
+def get_allowlist(_: Annotated[User, Depends(require_admin)], response: Response) -> dict:
+    response.headers["Cache-Control"] = "no-store"
     return {"terms": _read_allowlist()}
 
 
@@ -115,7 +116,9 @@ def get_allowlist(_: Annotated[User, Depends(require_admin)]) -> dict:
 def update_allowlist(
     payload: AllowlistPayload,
     _: Annotated[User, Depends(require_admin)],
+    response: Response,
 ) -> dict:
+    response.headers["Cache-Control"] = "no-store"
     ALLOWLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
     seen: set[str] = set()
     terms: list[str] = []

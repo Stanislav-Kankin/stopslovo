@@ -24,7 +24,7 @@ export function AllowlistAdmin({ user }) {
 
   useEffect(() => {
     if (!user?.is_admin) return;
-    fetch("/api/admin/allowlist", { credentials: "include" })
+    fetch("/api/admin/allowlist", { credentials: "include", cache: "no-store" })
       .then(async (response) => {
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.detail || "Не удалось загрузить белый список");
@@ -67,8 +67,13 @@ export function AllowlistAdmin({ user }) {
   };
 
   const importFromTextarea = () => {
+    const next = termsFromDraft();
+    updateTerms(next);
+  };
+
+  const termsFromDraft = () => {
     const seen = new Set();
-    const next = draft
+    return draft
       .split(/[\n,;]+/)
       .map(normalizeTerm)
       .filter(Boolean)
@@ -78,18 +83,20 @@ export function AllowlistAdmin({ user }) {
         seen.add(key);
         return true;
       });
-    updateTerms(next);
   };
 
   const save = async () => {
     setError("");
     setStatus("");
     try {
+      const nextTerms = termsFromDraft();
+      setTerms(nextTerms);
       const response = await fetch("/api/admin/allowlist", {
         method: "PUT",
         credentials: "include",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ terms })
+        body: JSON.stringify({ terms: nextTerms })
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.detail || "Не удалось сохранить белый список");
