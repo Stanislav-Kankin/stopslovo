@@ -336,26 +336,28 @@ function HomePage({ me, refreshMe }) {
     }
   };
 
-  const refineBatchIssue = async (item, issue, event) => {
-    event?.stopPropagation();
-    const key = `${item.request_id}:${issueKey(issue)}`;
-    setRefiningIssue(key);
+  const refineBatchTerm = async (term) => {
+    const targetKey = `${term.normalized || term.term.toLowerCase()}|${term.category || ""}`;
+    const sourceRow = batchResults.find((row) =>
+      uniqueIssues(row.issues).some((issue) => issueKey(issue) === targetKey)
+    );
+    const sourceIssue = sourceRow?.issues.find((issue) => issueKey(issue) === targetKey);
+    if (!sourceRow || !sourceIssue) return;
+
+    setRefiningIssue(targetKey);
     setError("");
     try {
-      const data = await postJson("/api/v1/check/refine", { text: item.original_text, context_type: DEFAULT_CONTEXT, issue });
+      const data = await postJson("/api/v1/check/refine", { text: sourceRow.original_text, context_type: DEFAULT_CONTEXT, issue: sourceIssue });
       setBatchResults((rows) =>
-        rows.map((row) =>
-          row.request_id === item.request_id
-            ? {
-                ...row,
-                issues: replaceIssue(row.issues, data.issue),
-                rewritten_text: data.rewritten_text || row.rewritten_text,
-                summary: data.summary || row.summary,
-                manual_review_required: data.manual_review_required,
-                manual_review_reason: data.manual_review_reason
-              }
-            : row
-        )
+        rows.map((row) => {
+          if (!row.issues.some((issue) => issueKey(issue) === targetKey)) return row;
+          return {
+            ...row,
+            issues: replaceIssue(row.issues, data.issue),
+            manual_review_required: data.manual_review_required || row.manual_review_required,
+            manual_review_reason: data.manual_review_reason || row.manual_review_reason
+          };
+        })
       );
       await refreshMe();
     } catch (err) {
@@ -537,7 +539,15 @@ function HomePage({ me, refreshMe }) {
           </div>
 
           {error && <div className="error-box">{error}</div>}
-          <BatchSummary results={batchResults} selectedTerm={selectedTerm} onSelectTerm={(term) => { setSelectedTerm(term); setPage(1); }} onDownloadXlsx={exportXlsx} onDownloadCsv={exportCsv} />
+          <BatchSummary
+            results={batchResults}
+            selectedTerm={selectedTerm}
+            onSelectTerm={(term) => { setSelectedTerm(term); setPage(1); }}
+            onDownloadXlsx={exportXlsx}
+            onDownloadCsv={exportCsv}
+            onRefineTerm={refineBatchTerm}
+            refiningTerm={refiningIssue}
+          />
 
           {batchResults.length > 0 && (
             <div className="panel">
@@ -590,13 +600,6 @@ function HomePage({ me, refreshMe }) {
                                         Источники: {issue.sources.join("; ")}
                                       </p>
                                     )}
-                                    <button
-                                      className="secondary-button mt-3 text-sm"
-                                      disabled={refiningIssue === `${item.request_id}:${issueKey(issue)}`}
-                                      onClick={(event) => refineBatchIssue(item, issue, event)}
-                                    >
-                                      {refiningIssue === `${item.request_id}:${issueKey(issue)}` ? "Уточняем..." : "Уточнить через ИИ"}
-                                    </button>
                                   </div>
                                 ))}
                               </div>
