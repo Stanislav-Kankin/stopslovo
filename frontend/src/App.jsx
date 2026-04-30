@@ -122,6 +122,21 @@ function uniqueIssues(issues = []) {
   return [...map.values()];
 }
 
+function issueKey(issue) {
+  return `${issue.normalized || issue.term.toLowerCase()}|${issue.category || ""}`;
+}
+
+function replaceIssue(issues = [], refined) {
+  const targetKey = issueKey(refined);
+  let replaced = false;
+  const next = issues.map((issue) => {
+    if (issueKey(issue) !== targetKey) return issue;
+    replaced = true;
+    return { ...issue, ...refined };
+  });
+  return replaced ? next : [...next, refined];
+}
+
 function HighlightedText({ text, issues }) {
   const terms = uniqueIssues(issues).filter((issue) => ["high", "medium"].includes(issue.risk)).map((issue) => issue.term);
   if (!terms.length) return <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">{text}</p>;
@@ -160,7 +175,7 @@ function HighlightedRewrite({ text, issues }) {
   );
 }
 
-function ResultView({ result }) {
+function ResultView({ result, onRefineIssue, refiningIssue }) {
   const [copied, setCopied] = useState(false);
   if (!result) return null;
   const issues = uniqueIssues(result.issues);
@@ -226,6 +241,13 @@ function ResultView({ result }) {
                     Источники: {issue.sources.join("; ")}
                   </p>
                 )}
+                <button
+                  className="secondary-button mt-3 text-sm"
+                  disabled={refiningIssue === issueKey(issue)}
+                  onClick={() => onRefineIssue?.(issue)}
+                >
+                  {refiningIssue === issueKey(issue) ? "Уточняем..." : "Уточнить через ИИ"}
+                </button>
               </article>
             ))}
           </div>
@@ -262,6 +284,7 @@ function HomePage({ me, refreshMe }) {
   const [page, setPage] = useState(1);
   const [expandedResults, setExpandedResults] = useState(new Set());
   const [selectedTerm, setSelectedTerm] = useState("");
+  const [refiningIssue, setRefiningIssue] = useState("");
 
   const excludedTerms = useMemo(() => parseExcludedTerms(excludedTermsText), [excludedTermsText]);
   const filteredResults = useMemo(
@@ -288,6 +311,57 @@ function HomePage({ me, refreshMe }) {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const refineSingleIssue = async (issue) => {
+    const key = issueKey(issue);
+    setRefiningIssue(key);
+    setError("");
+    try {
+      const data = await postJson("/api/v1/check/refine", { text: result.original_text, context_type: DEFAULT_CONTEXT, issue });
+      setResult((current) => ({
+        ...current,
+        issues: replaceIssue(current.issues, data.issue),
+        rewritten_text: data.rewritten_text || current.rewritten_text,
+        summary: data.summary || current.summary,
+        manual_review_required: data.manual_review_required,
+        manual_review_reason: data.manual_review_reason
+      }));
+      await refreshMe();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRefiningIssue("");
+    }
+  };
+
+  const refineBatchIssue = async (item, issue, event) => {
+    event?.stopPropagation();
+    const key = `${item.request_id}:${issueKey(issue)}`;
+    setRefiningIssue(key);
+    setError("");
+    try {
+      const data = await postJson("/api/v1/check/refine", { text: item.original_text, context_type: DEFAULT_CONTEXT, issue });
+      setBatchResults((rows) =>
+        rows.map((row) =>
+          row.request_id === item.request_id
+            ? {
+                ...row,
+                issues: replaceIssue(row.issues, data.issue),
+                rewritten_text: data.rewritten_text || row.rewritten_text,
+                summary: data.summary || row.summary,
+                manual_review_required: data.manual_review_required,
+                manual_review_reason: data.manual_review_reason
+              }
+            : row
+        )
+      );
+      await refreshMe();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRefiningIssue("");
     }
   };
 
@@ -341,7 +415,7 @@ function HomePage({ me, refreshMe }) {
       const collected = [];
       for (let index = 0; index < chunks.length; index += 1) {
         const data = await postJson("/api/v1/check/batch", {
-          items: chunks[index].map((item) => ({ ...item, context_type: DEFAULT_CONTEXT, use_llm: true, excluded_terms: excludedTerms }))
+          items: chunks[index].map((item) => ({ ...item, context_type: DEFAULT_CONTEXT, use_llm: false, excluded_terms: excludedTerms }))
         });
         collected.push(...data.items);
         setBatchResults([...collected]);
@@ -423,7 +497,7 @@ function HomePage({ me, refreshMe }) {
             </div>
           </section>
           {error && <div className="error-box">{error}</div>}
-          <ResultView result={result} />
+        <ResultView result={result} onRefineIssue={refineSingleIssue} refiningIssue={refiningIssue} />
         </>
       ) : (
         <section className="space-y-5">
@@ -516,6 +590,13 @@ function HomePage({ me, refreshMe }) {
                                         Источники: {issue.sources.join("; ")}
                                       </p>
                                     )}
+                                    <button
+                                      className="secondary-button mt-3 text-sm"
+                                      disabled={refiningIssue === `${item.request_id}:${issueKey(issue)}`}
+                                      onClick={(event) => refineBatchIssue(item, issue, event)}
+                                    >
+                                      {refiningIssue === `${item.request_id}:${issueKey(issue)}` ? "Уточняем..." : "Уточнить через ИИ"}
+                                    </button>
                                   </div>
                                 ))}
                               </div>

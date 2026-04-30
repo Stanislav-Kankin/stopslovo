@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from sqlmodel import Session
 
 from app.api.v1.auth import get_user_from_request
-from app.api.v1.schemas import CheckBatchRequest, CheckBatchResponse, CheckTextRequest, CheckTextResponse
+from app.api.v1.schemas import CheckBatchRequest, CheckBatchResponse, CheckTextRequest, CheckTextResponse, RefineIssueRequest, RefineIssueResponse
 from app.db import get_session
 from app.models.user import User
 from app.services.dictionary_checker import DictionaryChecker
@@ -125,6 +125,29 @@ def check_batch(
 @router.get("/llm/status")
 def llm_status() -> dict:
     return llm.status()
+
+
+@router.post("/refine", response_model=RefineIssueResponse)
+def refine_issue(
+    payload: RefineIssueRequest,
+    request: Request,
+    response: Response,
+    session: Session = Depends(get_session),
+) -> dict | JSONResponse:
+    user_id, plan = _quota_identity(request, response, session)
+    if not check_quota(session, user_id, plan, chars=_word_count(payload.text), rows=0):
+        return _quota_error()
+    clean_text = preprocessor.clean(payload.text)
+    issue = payload.issue.model_dump()
+    analysis = llm.analyze(clean_text, payload.context_type, [issue], use_llm=True)
+    refined_issue = analysis["issues"][0] if analysis["issues"] else issue
+    return {
+        "issue": refined_issue,
+        "summary": analysis["summary"],
+        "rewritten_text": analysis["rewritten_text"],
+        "manual_review_required": analysis["manual_review_required"],
+        "manual_review_reason": analysis.get("manual_review_reason"),
+    }
 
 
 @router.get("/{result_id}", response_model=CheckTextResponse)

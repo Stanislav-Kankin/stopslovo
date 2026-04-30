@@ -53,3 +53,17 @@ class CheckTextResponse(BaseModel):
 
 class CheckBatchResponse(BaseModel):
     items: list[CheckTextResponse]
+
+
+class RefineIssueRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=20_000)
+    context_type: ContextType = "реклама"
+    issue: Issue
+
+
+class RefineIssueResponse(BaseModel):
+    issue: Issue
+    summary: str
+    rewritten_text: str
+    manual_review_required: bool
+    manual_review_reason: str | None
