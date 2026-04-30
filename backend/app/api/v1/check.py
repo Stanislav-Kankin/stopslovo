@@ -57,13 +57,13 @@ def _active_plan(user: User | None) -> str:
     return user.plan
 
 
-def _quota_identity(request: Request, response: Response, session: Session) -> tuple[str, str]:
+def _quota_identity(request: Request, response: Response, session: Session) -> tuple[str, str, datetime | None]:
     user = get_user_from_request(request, session)
     if user:
-        return user.id, _active_plan(user)
+        return user.id, _active_plan(user), user.created_at
     anon_id = request.cookies.get(ANON_COOKIE) or str(uuid4())
     response.set_cookie(ANON_COOKIE, anon_id, max_age=365 * 24 * 60 * 60, httponly=True, samesite="lax")
-    return f"anon:{anon_id}", "anon"
+    return f"anon:{anon_id}", "anon", None
 
 
 def _quota_error() -> JSONResponse:
@@ -128,14 +128,14 @@ def check_text(
     session: Session = Depends(get_session),
 ) -> dict | JSONResponse:
     user = get_user_from_request(request, session)
-    user_id, plan = _quota_identity(request, response, session)
-    if not check_quota(session, user_id, plan, chars=_word_count(payload.text), rows=0):
+    user_id, plan, quota_started_at = _quota_identity(request, response, session)
+    if not check_quota(session, user_id, plan, chars=_word_count(payload.text), rows=0, started_at=quota_started_at):
         return _quota_error()
     effective_payload = payload
     if payload.use_llm:
         if not user:
             effective_payload = payload.model_copy(update={"use_llm": False})
-        elif not check_ai_quota(session, user.id, _active_plan(user)):
+        elif not check_ai_quota(session, user.id, _active_plan(user), started_at=user.created_at):
             effective_payload = payload.model_copy(update={"use_llm": False})
     return process_request(effective_payload)
 
@@ -147,8 +147,8 @@ def check_batch(
     response: Response,
     session: Session = Depends(get_session),
 ) -> dict | JSONResponse:
-    user_id, plan = _quota_identity(request, response, session)
-    if not check_quota(session, user_id, plan, chars=0, rows=len(payload.items)):
+    user_id, plan, quota_started_at = _quota_identity(request, response, session)
+    if not check_quota(session, user_id, plan, chars=0, rows=len(payload.items), started_at=quota_started_at):
         return _quota_error()
     return {"items": [process_request(item) for item in payload.items]}
 
@@ -169,9 +169,9 @@ def refine_issue(
     if not user:
         return _ai_quota_error(status_code=401)
     user_id, plan = user.id, _active_plan(user)
-    if not check_ai_quota(session, user_id, plan):
+    if not check_ai_quota(session, user_id, plan, started_at=user.created_at):
         return _ai_quota_error()
-    if not check_quota(session, user_id, plan, chars=_word_count(payload.text), rows=0):
+    if not check_quota(session, user_id, plan, chars=_word_count(payload.text), rows=0, started_at=user.created_at):
         return _quota_error()
     clean_text = preprocessor.clean(payload.text)
     issue = payload.issue.model_dump()

@@ -12,7 +12,7 @@ from sqlmodel import Session, select
 
 from app.db import get_session
 from app.models.user import User
-from app.services.quota import get_remaining
+from app.services.quota import get_remaining, next_monthly_renewal
 
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -92,12 +92,14 @@ def get_current_user(
 
 def user_payload(user: User, session: Session) -> dict:
     plan = "free" if user.plan_expires_at and user.plan_expires_at < datetime.utcnow() else user.plan
-    quota = get_remaining(session, user.id, plan)
+    quota = get_remaining(session, user.id, plan, started_at=user.created_at)
+    quota_resets_at = next_monthly_renewal(user.created_at) if plan == "free" else None
     return {
         "id": user.id,
         "email": user.email,
         "plan": plan,
         "plan_expires_at": user.plan_expires_at,
+        "quota_resets_at": quota_resets_at,
         "is_active": user.is_active,
         "is_admin": user.email.lower() == ADMIN_EMAIL,
         "created_at": user.created_at,

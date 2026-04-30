@@ -10,6 +10,7 @@ export function Register({ onRegister }) {
   const [password, setPassword] = useState("");
   const [repeat, setRepeat] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showRepeat, setShowRepeat] = useState(false);
   const [error, setError] = useState("");
 
   const submit = async (event) => {
@@ -46,7 +47,17 @@ export function Register({ onRegister }) {
             {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
           </button>
         </div>
-        <input className="input w-full" type={showPassword ? "text" : "password"} value={repeat} onChange={(event) => setRepeat(event.target.value)} placeholder="Повторите пароль" required />
+        <div className="relative">
+          <input className="input w-full pr-12" type={showRepeat ? "text" : "password"} value={repeat} onChange={(event) => setRepeat(event.target.value)} placeholder="Повторите пароль" required />
+          <button
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-800 dark:text-slate-300 dark:hover:text-white"
+            type="button"
+            onClick={() => setShowRepeat((value) => !value)}
+            title={showRepeat ? "Скрыть пароль" : "Показать пароль"}
+          >
+            {showRepeat ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+          </button>
+        </div>
         {error && <div className="error-box">{error}</div>}
         <button className="primary-button w-full" type="submit">Создать аккаунт</button>
         <div className="grid gap-2">

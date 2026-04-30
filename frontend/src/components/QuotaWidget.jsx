@@ -11,6 +11,28 @@ function formatLimit(value) {
   return value < 0 ? "∞" : Number(value || 0).toLocaleString("ru-RU");
 }
 
+function formatRuDateTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (number) => String(number).padStart(2, "0");
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())} ${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()}`;
+}
+
+function renewalInfo(user) {
+  if (!user || user.plan === "anon") return null;
+  if (user.plan === "free" && user.quota_resets_at) {
+    return { label: "Обновится", value: formatRuDateTime(user.quota_resets_at) };
+  }
+  if (user.plan_expires_at) {
+    return { label: "Действует до", value: formatRuDateTime(user.plan_expires_at) };
+  }
+  if (["freelancer", "agency_s", "agency_m", "one_time"].includes(user.plan)) {
+    return { label: "Действует", value: "без даты окончания" };
+  }
+  return null;
+}
+
 function Meter({ label, used, limit }) {
   const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 100;
   const remaining = limit < 0 ? -1 : Math.max((limit || 0) - (used || 0), 0);
@@ -32,12 +54,18 @@ function Meter({ label, used, limit }) {
 
 export function QuotaWidget({ user }) {
   if (!user) return null;
+  const renewal = renewalInfo(user);
   return (
     <section className="border-b border-[#e0e0da] bg-[#f7f7f4]/85 px-4 py-4 dark:border-[#38505c] dark:bg-[#1d2a34]/75">
       <div className="mx-auto grid max-w-6xl gap-4 md:grid-cols-[220px_1fr_1fr_1fr] md:items-center">
         <div>
           <p className="eyebrow">лимиты</p>
           <p className="text-base font-semibold leading-tight text-[#1a1a18] dark:text-[#f4f7f2]">{planLabels[user.plan] || user.plan}</p>
+          {renewal && renewal.value && (
+            <p className="mt-2 inline-flex rounded-full border border-[#d6d8cf] bg-white/70 px-3 py-1 text-xs font-medium text-[#65655d] shadow-sm dark:border-[#3b5361] dark:bg-[#243744]/70 dark:text-[#c1d0cc]">
+              {renewal.label}: {renewal.value}
+            </p>
+          )}
         </div>
         <Meter label="Лимит слов" used={user.chars_used ?? 0} limit={user.chars_limit ?? 0} />
         <Meter label="Лимит строк файлов" used={user.rows_used ?? 0} limit={user.rows_limit ?? 0} />

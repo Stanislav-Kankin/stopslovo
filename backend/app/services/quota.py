@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlmodel import Session, select
 
@@ -15,12 +15,49 @@ PLAN_LIMITS = {
 }
 
 
-def current_month(plan: str) -> str:
-    return "one-time" if PLAN_LIMITS.get(plan, PLAN_LIMITS["free"]).get("one_time") else datetime.utcnow().strftime("%Y-%m")
+def next_monthly_renewal(started_at: datetime, now: datetime | None = None) -> datetime:
+    now = now or datetime.utcnow()
+    base = started_at.replace(tzinfo=None)
+    year = now.year
+    month = now.month
+
+    def candidate_for(candidate_year: int, candidate_month: int) -> datetime:
+        if candidate_month == 12:
+            next_month = datetime(candidate_year + 1, 1, 1)
+        else:
+            next_month = datetime(candidate_year, candidate_month + 1, 1)
+        last_day = (next_month - timedelta(days=1)).day
+        day = min(base.day, last_day)
+        return datetime(candidate_year, candidate_month, day, base.hour, base.minute, base.second)
+
+    candidate = candidate_for(year, month)
+    if candidate <= now:
+        if month == 12:
+            year += 1
+            month = 1
+        else:
+            month += 1
+        candidate = candidate_for(year, month)
+    return candidate
 
 
-def get_or_create_usage(session: Session, user_id: str, plan: str) -> UsageRecord:
-    month = current_month(plan)
+def current_month(plan: str, started_at: datetime | None = None) -> str:
+    limits = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"])
+    if limits.get("one_time"):
+        return "one-time"
+    if not started_at:
+        return datetime.utcnow().strftime("%Y-%m")
+    renewal = next_monthly_renewal(started_at)
+    previous_month = renewal.month - 1
+    previous_year = renewal.year
+    if previous_month == 0:
+        previous_month = 12
+        previous_year -= 1
+    return f"{previous_year:04d}-{previous_month:02d}-{started_at.day:02d}"
+
+
+def get_or_create_usage(session: Session, user_id: str, plan: str, started_at: datetime | None = None) -> UsageRecord:
+    month = current_month(plan, started_at)
     record = session.exec(
         select(UsageRecord).where(UsageRecord.user_id == user_id, UsageRecord.month == month)
     ).first()
@@ -33,9 +70,9 @@ def get_or_create_usage(session: Session, user_id: str, plan: str) -> UsageRecor
     return record
 
 
-def check_quota(session: Session, user_id: str, plan: str, chars: int = 0, rows: int = 0) -> bool:
+def check_quota(session: Session, user_id: str, plan: str, chars: int = 0, rows: int = 0, started_at: datetime | None = None) -> bool:
     limits = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"])
-    record = get_or_create_usage(session, user_id, plan)
+    record = get_or_create_usage(session, user_id, plan, started_at)
 
     chars_limit = limits["chars_per_month"]
     rows_limit = limits["rows_per_month"]
@@ -51,9 +88,9 @@ def check_quota(session: Session, user_id: str, plan: str, chars: int = 0, rows:
     return True
 
 
-def check_ai_quota(session: Session, user_id: str, plan: str, amount: int = 1) -> bool:
+def check_ai_quota(session: Session, user_id: str, plan: str, amount: int = 1, started_at: datetime | None = None) -> bool:
     limits = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"])
-    record = get_or_create_usage(session, user_id, plan)
+    record = get_or_create_usage(session, user_id, plan, started_at)
     ai_limit = limits["ai_per_month"]
     if ai_limit >= 0 and record.ai_used + amount > ai_limit:
         return False
@@ -63,9 +100,9 @@ def check_ai_quota(session: Session, user_id: str, plan: str, amount: int = 1) -
     return True
 
 
-def get_remaining(session: Session, user_id: str, plan: str) -> dict:
+def get_remaining(session: Session, user_id: str, plan: str, started_at: datetime | None = None) -> dict:
     limits = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"])
-    record = get_or_create_usage(session, user_id, plan)
+    record = get_or_create_usage(session, user_id, plan, started_at)
 
     def remaining(limit: int, used: int) -> int:
         return -1 if limit < 0 else max(limit - used, 0)
