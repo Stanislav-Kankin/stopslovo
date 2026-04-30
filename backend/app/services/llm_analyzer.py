@@ -358,6 +358,12 @@ class LLMAnalyzer:
     def _public_error(exc: Exception) -> str:
         status_code = getattr(exc, "status_code", None)
         if status_code:
+            if int(status_code) == 402:
+                return "HTTP 402: DeepSeek отклонил запрос из-за оплаты или недостаточного баланса API"
+            if int(status_code) == 401:
+                return "HTTP 401: DeepSeek не принял API-ключ"
+            if int(status_code) == 429:
+                return "HTTP 429: превышен лимит запросов DeepSeek"
             return f"HTTP {status_code}"
         message = str(exc).strip()
         if not message:

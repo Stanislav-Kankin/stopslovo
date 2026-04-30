@@ -22,7 +22,7 @@ class RiskScorer:
         has_high = any(issue["risk"] == "high" for issue in issues)
         ambiguous = [issue["term"] for issue in issues if "бренд" in issue.get("reason", "").lower()]
         if context_type in {"реклама", "баннер"} and has_high:
-            return True, "В рекламе или баннере найден высокий риск, нужна ручная юридическая проверка."
+            return True, "В тексте найден высокий риск, нужна ручная юридическая проверка."
         if ambiguous:
             return True, f"Нужно проверить статус слов как бренда или общеупотребимого термина: {', '.join(ambiguous)}."
         return False, None
