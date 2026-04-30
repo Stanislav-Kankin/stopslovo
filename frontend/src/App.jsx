@@ -16,6 +16,66 @@ import { importRowsFromFile } from "./utils/importRows";
 
 const BATCH_CHUNK_SIZE = 100;
 const DEFAULT_CONTEXT = "реклама";
+const HOME_STATE_DB = "stopslovo-state";
+const HOME_STATE_STORE = "kv";
+const HOME_STATE_KEY = "home-page-v1";
+const DEFAULT_SINGLE_TEXT = "Big sale и кешбэк на premium товары только сегодня";
+
+function openStateDb() {
+  return new Promise((resolve, reject) => {
+    if (!("indexedDB" in window)) {
+      reject(new Error("IndexedDB is not available"));
+      return;
+    }
+    const request = indexedDB.open(HOME_STATE_DB, 1);
+    request.onupgradeneeded = () => {
+      request.result.createObjectStore(HOME_STATE_STORE);
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function readSavedState(key) {
+  try {
+    const db = await openStateDb();
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction(HOME_STATE_STORE, "readonly");
+      const request = transaction.objectStore(HOME_STATE_STORE).get(key);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error);
+      transaction.oncomplete = () => db.close();
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function writeSavedState(key, value) {
+  try {
+    const db = await openStateDb();
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction(HOME_STATE_STORE, "readwrite");
+      transaction.objectStore(HOME_STATE_STORE).put(value, key);
+      transaction.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      transaction.onerror = () => reject(transaction.error);
+    });
+  } catch {
+    // Autosave is best-effort. If the browser blocks storage, the app should keep working.
+  }
+}
+
+function readBooleanPreference(key, fallback = false) {
+  try {
+    const value = localStorage.getItem(key);
+    return value === null ? fallback : value === "true";
+  } catch {
+    return fallback;
+  }
+}
 
 const riskLabels = {
   high: "Высокий",
@@ -269,7 +329,7 @@ function ResultView({ result, onRefineIssue, refiningIssue }) {
 
 function HomePage({ me, refreshMe }) {
   const [mode, setMode] = useState("single");
-  const [text, setText] = useState("Big sale и кешбэк на premium товары только сегодня");
+  const [text, setText] = useState(DEFAULT_SINGLE_TEXT);
   const [excludedTermsText, setExcludedTermsText] = useState("");
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
@@ -285,6 +345,7 @@ function HomePage({ me, refreshMe }) {
   const [expandedResults, setExpandedResults] = useState(new Set());
   const [selectedTerm, setSelectedTerm] = useState("");
   const [refiningIssue, setRefiningIssue] = useState("");
+  const [stateRestored, setStateRestored] = useState(false);
 
   const excludedTerms = useMemo(() => parseExcludedTerms(excludedTermsText), [excludedTermsText]);
   const filteredResults = useMemo(
@@ -300,6 +361,72 @@ function HomePage({ me, refreshMe }) {
   const visibleResults = sortedResults.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const currentUser = me?.authenticated ? me.user : null;
   const rowsRemaining = currentUser?.rows_remaining;
+
+  useEffect(() => {
+    let active = true;
+    readSavedState(HOME_STATE_KEY).then((saved) => {
+      if (!active) return;
+      if (saved) {
+        setMode(saved.mode || "single");
+        setText(saved.text ?? DEFAULT_SINGLE_TEXT);
+        setExcludedTermsText(saved.excludedTermsText || "");
+        setResult(saved.result || null);
+        setBatchRows(Array.isArray(saved.batchRows) ? saved.batchRows : []);
+        setBatchResults(Array.isArray(saved.batchResults) ? saved.batchResults : []);
+        setBatchImportSummary(saved.batchImportSummary || "");
+        setBatchImportColumns(Array.isArray(saved.batchImportColumns) ? saved.batchImportColumns : []);
+        setProgress(Number(saved.progress) || 0);
+        setSortDesc(saved.sortDesc ?? true);
+        setPageSize(Number(saved.pageSize) || 20);
+        setPage(Number(saved.page) || 1);
+        setExpandedResults(new Set(Array.isArray(saved.expandedResults) ? saved.expandedResults : []));
+        setSelectedTerm(saved.selectedTerm || "");
+      }
+      setStateRestored(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!stateRestored) return undefined;
+    const timeout = window.setTimeout(() => {
+      writeSavedState(HOME_STATE_KEY, {
+        mode,
+        text,
+        excludedTermsText,
+        result,
+        batchRows,
+        batchResults,
+        batchImportSummary,
+        batchImportColumns,
+        progress,
+        sortDesc,
+        pageSize,
+        page,
+        expandedResults: [...expandedResults],
+        selectedTerm
+      });
+    }, 400);
+    return () => window.clearTimeout(timeout);
+  }, [
+    mode,
+    text,
+    excludedTermsText,
+    result,
+    batchRows,
+    batchResults,
+    batchImportSummary,
+    batchImportColumns,
+    progress,
+    sortDesc,
+    pageSize,
+    page,
+    expandedResults,
+    selectedTerm,
+    stateRestored
+  ]);
 
   const checkSingle = async () => {
     setLoading(true);
@@ -630,7 +757,7 @@ function HomePage({ me, refreshMe }) {
 }
 
 export default function App() {
-  const [dark, setDark] = useState(false);
+  const [dark, setDark] = useState(() => readBooleanPreference("stopslovo-dark", false));
   const [me, setMe] = useState(null);
 
   const refreshMe = async () => {
@@ -642,6 +769,14 @@ export default function App() {
   useEffect(() => {
     refreshMe().catch(() => setMe({ authenticated: false, plan: "anon" }));
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("stopslovo-dark", String(dark));
+    } catch {
+      // Theme persistence is optional.
+    }
+  }, [dark]);
 
   const login = async (email, password) => {
     await postJson("/api/auth/login", { email, password });
