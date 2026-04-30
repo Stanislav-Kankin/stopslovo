@@ -78,3 +78,19 @@ def test_user_excluded_phrase_is_not_flagged() -> None:
     assert "grand" not in terms
     assert "line" not in terms
     assert "sale" in terms
+
+
+def test_repeated_terms_are_reported_once_per_text() -> None:
+    response = client.post(
+        "/api/v1/check/text",
+        json={
+            "text": "Grand Line Grand Line sale sale",
+            "context_type": "реклама",
+            "use_llm": False,
+        },
+    )
+    assert response.status_code == 200
+    terms = [issue["normalized"] for issue in response.json()["issues"]]
+    assert terms.count("grand") == 1
+    assert terms.count("line") == 1
+    assert terms.count("sale") == 1

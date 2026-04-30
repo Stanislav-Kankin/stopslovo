@@ -34,11 +34,11 @@ function localizeSystemText(value) {
 }
 
 function issueTerms(issues) {
-  return issues.map((issue) => issue.term).join(", ");
+  return uniqueIssues(issues).map((issue) => issue.term).join(", ");
 }
 
 function issueDetails(issues) {
-  return issues
+  return uniqueIssues(issues)
     .map((issue) => {
       const replacements = issue.replacements?.length ? `; замены: ${issue.replacements.join(", ")}` : "";
       const sources = issue.sources?.length ? `; источники: ${issue.sources.join("; ")}` : "";
@@ -47,11 +47,28 @@ function issueDetails(issues) {
     .join("\n");
 }
 
+function uniqueIssues(issues = []) {
+  const map = new Map();
+  const riskWeight = { high: 4, medium: 3, low: 2, safe: 1 };
+  for (const issue of issues) {
+    const key = `${issue.normalized || issue.term.toLowerCase()}|${issue.category || ""}`;
+    const current = map.get(key);
+    if (!current || riskWeight[issue.risk] > riskWeight[current.risk]) {
+      map.set(key, { ...issue });
+      continue;
+    }
+    if (current && !current.replacements?.length && issue.replacements?.length) {
+      current.replacements = issue.replacements;
+    }
+  }
+  return [...map.values()];
+}
+
 function aggregateByTerm(rows) {
   const riskWeight = { high: 4, medium: 3, low: 2, safe: 1 };
   const map = {};
   for (const row of rows) {
-    for (const issue of row.issues || []) {
+    for (const issue of uniqueIssues(row.issues || [])) {
       const key = issue.normalized || issue.term.toLowerCase();
       if (!map[key]) {
         map[key] = {
@@ -126,7 +143,7 @@ export function exportResultsXlsx(rows, sourceRows = [], filename = "стопс�
     ID: row.request_id,
     "Общий риск": RISK_LABELS[row.overall_risk] || row.overall_risk,
     "Ручная проверка": row.manual_review_required ? "Да" : "Нет",
-    "Количество замечаний": row.issues.length,
+    "Количество замечаний": uniqueIssues(row.issues).length,
     "Проблемные слова": issueTerms(row.issues),
     "Детали замечаний": issueDetails(row.issues),
     "Исходный текст": row.original_text,

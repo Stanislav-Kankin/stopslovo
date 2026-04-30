@@ -54,6 +54,14 @@ export function toCsv(rows) {
       .replace(/\blow\b/gi, riskLabels.low)
       .replace(/\bsafe\b/gi, riskLabels.safe);
   const header = ["ID", "Общий риск", "Ручная проверка", "Замечания", "Переписанный текст", "Резюме"];
+  const uniqueIssues = (issues = []) => {
+    const map = new Map();
+    for (const issue of issues) {
+      const key = `${issue.normalized || issue.term.toLowerCase()}|${issue.category || ""}`;
+      if (!map.has(key)) map.set(key, issue);
+    }
+    return [...map.values()];
+  };
   const escape = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
   const delimiter = ";";
   return [
@@ -64,7 +72,7 @@ export function toCsv(rows) {
         row.request_id,
         riskLabels[row.overall_risk] || row.overall_risk,
         row.manual_review_required ? "да" : "нет",
-        row.issues
+        uniqueIssues(row.issues)
           .map((issue) => {
             const sources = issue.sources?.length ? `, источники: ${issue.sources.join("; ")}` : "";
             return `${issue.term}: ${riskLabels[issue.risk] || issue.risk}${sources}`;

@@ -77,6 +77,10 @@ def _quota_error() -> JSONResponse:
     )
 
 
+def _word_count(text: str) -> int:
+    return len(re.findall(r"[\wА-Яа-яЁё-]+", text, flags=re.UNICODE))
+
+
 def process_request(payload: CheckTextRequest) -> dict:
     clean_text = preprocessor.clean(payload.text)
     tokens = preprocessor.tokenize(clean_text)
@@ -100,7 +104,7 @@ def check_text(
     session: Session = Depends(get_session),
 ) -> dict | JSONResponse:
     user_id, plan = _quota_identity(request, response, session)
-    if not check_quota(session, user_id, plan, chars=len(payload.text), rows=0):
+    if not check_quota(session, user_id, plan, chars=_word_count(payload.text), rows=0):
         return _quota_error()
     return process_request(payload)
 

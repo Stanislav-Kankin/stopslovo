@@ -25,7 +25,7 @@ class DictionaryChecker:
             self.registered_names = set()
 
     def check(self, tokens: list[dict], latin_matches: list[dict], normalizer, context_type: str, ran_lexicon=None) -> list[dict]:
-        found: dict[tuple[str, int | None], dict] = {}
+        found: dict[tuple[str, str], dict] = {}
 
         for match in latin_matches:
             normalized = match["term"].lower()
@@ -33,9 +33,9 @@ class DictionaryChecker:
                 continue
             entry = self.by_normalized.get(normalized)
             if entry:
-                found[(match["term"].lower(), match["start"])] = self._issue(match, entry, context_type)
+                found.setdefault((normalized, "latin"), self._issue(match, entry, context_type))
             else:
-                found[(match["term"].lower(), match["start"])] = {
+                found.setdefault((normalized, "latin"), {
                     "term": match["term"],
                     "normalized": normalized,
                     "script": "latin",
@@ -51,7 +51,7 @@ class DictionaryChecker:
                     "keep_as_is": True,
                     "start": match.get("start"),
                     "end": match.get("end"),
-                }
+                })
 
         for token in tokens:
             if not self._has_cyrillic(token["term"]):
@@ -63,15 +63,18 @@ class DictionaryChecker:
             if entry and entry["risk_base"] == "safe":
                 continue
             if entry:
-                found[(token["term"].lower(), token["start"])] = self._issue(
-                    {**token, "normalized": normalized},
-                    entry,
-                    context_type,
+                found.setdefault(
+                    (normalized, entry["script"]),
+                    self._issue(
+                        {**token, "normalized": normalized},
+                        entry,
+                        context_type,
+                    ),
                 )
                 continue
             if normalizer.is_known(token["term"]) or (ran_lexicon and ran_lexicon.contains(normalized)):
                 continue
-            found[(token["term"].lower(), token["start"])] = {
+            found.setdefault((normalized, "cyrillic_borrowing"), {
                 "term": token["term"],
                 "normalized": normalized,
                 "script": "cyrillic_borrowing",
@@ -87,7 +90,7 @@ class DictionaryChecker:
                 "keep_as_is": True,
                 "start": token.get("start"),
                 "end": token.get("end"),
-            }
+            })
 
         return list(found.values())
 

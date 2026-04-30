@@ -8,8 +8,8 @@ from app.models.user import UsageRecord
 PLAN_LIMITS = {
     "anon": {"chars_per_month": 1_000, "rows_per_month": 100, "one_time": True},
     "free": {"chars_per_month": 1_800, "rows_per_month": 200, "one_time": False},
-    "freelancer": {"chars_per_month": 500_000, "rows_per_month": 999_999, "one_time": False},
-    "agency_s": {"chars_per_month": 5_000_000, "rows_per_month": 999_999, "one_time": False},
+    "freelancer": {"chars_per_month": 10_000, "rows_per_month": 5_000, "one_time": False},
+    "agency_s": {"chars_per_month": 120_000, "rows_per_month": 50_000, "one_time": False},
     "agency_m": {"chars_per_month": -1, "rows_per_month": -1, "one_time": False},
 }
 

@@ -210,6 +210,7 @@ class LLMAnalyzer:
             raise ValueError("DeepSeek response is missing summary delimiter")
         json_part, summary = content.split("---SUMMARY---", 1)
         data = json.loads(json_part.strip())
+        data["issues"] = self._dedupe_issues(data.get("issues", []))
         data["summary"] = self._ensure_disclaimer(self._localize_summary(summary.strip()))
         return data
 
@@ -235,6 +236,7 @@ class LLMAnalyzer:
             for item in flagged
             if item["risk"] != "safe"
         ]
+        issues = self._dedupe_issues(issues)
         rewritten = self._rewrite(text, issues)
         overall = self.scorer.score(issues)
         manual, reason = self.scorer.needs_manual_review(context_type, issues)
@@ -267,7 +269,36 @@ class LLMAnalyzer:
             term = str(issue.get("term", "")).lower()
             sources = sources_by_normalized.get(normalized) or sources_by_term.get(term)
             issue["sources"] = sources or ["Найдено нейросетевым разбором; требуется ручная проверка источника."]
+        data["issues"] = LLMAnalyzer._dedupe_issues(data.get("issues", []))
         return data
+
+    @staticmethod
+    def _dedupe_issues(issues: list[dict]) -> list[dict]:
+        deduped: dict[tuple[str, str], dict] = {}
+        risk_weight = {"safe": 0, "low": 1, "medium": 2, "high": 3}
+        for issue in issues:
+            key = (
+                str(issue.get("normalized") or issue.get("term", "")).lower(),
+                str(issue.get("category") or ""),
+            )
+            if key not in deduped:
+                deduped[key] = issue
+                continue
+            current = deduped[key]
+            if risk_weight.get(issue.get("risk"), 0) > risk_weight.get(current.get("risk"), 0):
+                merged = {**issue}
+                merged["sources"] = current.get("sources", []) + [
+                    source for source in issue.get("sources", []) if source not in current.get("sources", [])
+                ]
+                deduped[key] = merged
+            else:
+                current_sources = current.setdefault("sources", [])
+                for source in issue.get("sources", []):
+                    if source not in current_sources:
+                        current_sources.append(source)
+                if not current.get("replacements") and issue.get("replacements"):
+                    current["replacements"] = issue["replacements"]
+        return list(deduped.values())
 
     @staticmethod
     def _rewrite(text: str, issues: list[dict]) -> str:

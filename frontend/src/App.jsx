@@ -110,8 +110,20 @@ function localizeSystemText(value) {
     .replace(/\bsafe\b/gi, riskSummaryLabels.safe);
 }
 
+function uniqueIssues(issues = []) {
+  const map = new Map();
+  for (const issue of issues) {
+    const key = `${issue.normalized || issue.term.toLowerCase()}|${issue.category || ""}`;
+    const current = map.get(key);
+    if (!current || riskWeight[issue.risk] > riskWeight[current.risk]) {
+      map.set(key, issue);
+    }
+  }
+  return [...map.values()];
+}
+
 function HighlightedText({ text, issues }) {
-  const terms = issues.filter((issue) => ["high", "medium"].includes(issue.risk)).map((issue) => issue.term);
+  const terms = uniqueIssues(issues).filter((issue) => ["high", "medium"].includes(issue.risk)).map((issue) => issue.term);
   if (!terms.length) return <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">{text}</p>;
   const pattern = new RegExp(`(${terms.map(escapeRegex).join("|")})`, "gi");
   return (
@@ -151,6 +163,7 @@ function HighlightedRewrite({ text, issues }) {
 function ResultView({ result }) {
   const [copied, setCopied] = useState(false);
   if (!result) return null;
+  const issues = uniqueIssues(result.issues);
   const copy = async () => {
     await navigator.clipboard.writeText(result.rewritten_text);
     setCopied(true);
@@ -195,11 +208,11 @@ function ResultView({ result }) {
       <div className="panel">
         <p className="eyebrow">замечания</p>
         <h2 className="section-title">Замечания</h2>
-        {result.issues.length === 0 ? (
+        {issues.length === 0 ? (
           <p className="text-slate-600 dark:text-slate-300">Автоматическая проверка не нашла слов из зоны риска.</p>
         ) : (
           <div className="grid gap-3">
-            {result.issues.map((issue, index) => (
+            {issues.map((issue, index) => (
               <article key={`${issue.term}-${index}`} className="rounded-md border border-slate-200 p-4 dark:border-[#38505c]">
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <strong className="text-slate-950 dark:text-white">{issue.term}</strong>
@@ -475,7 +488,7 @@ function HomePage({ me, refreshMe }) {
                         <div className="flex flex-wrap items-center gap-3">
                           <strong className="font-mono text-sm text-[#1a1a18] dark:text-[#f4f7f2]">{item.request_id}</strong>
                           <RiskBadge risk={item.overall_risk} />
-                          <span className="rounded-full border border-[#e0e0da] px-2.5 py-1 text-xs font-semibold text-[#7a7a70] dark:border-[#496574] dark:text-[#c1d0cc]">{item.issues.length} замечаний</span>
+                          <span className="rounded-full border border-[#e0e0da] px-2.5 py-1 text-xs font-semibold text-[#7a7a70] dark:border-[#496574] dark:text-[#c1d0cc]">{uniqueIssues(item.issues).length} замечаний</span>
                           <span className="ml-auto text-lg text-[#7a7a70] dark:text-[#c1d0cc]">{expanded ? "▲" : "▼"}</span>
                         </div>
                         <p className="mt-2 line-clamp-2 text-sm text-slate-700 dark:text-slate-200">{item.original_text.slice(0, 160)}{item.original_text.length > 160 ? "..." : ""}</p>
@@ -488,9 +501,9 @@ function HomePage({ me, refreshMe }) {
                           </div>
                           <div>
                             <p className="eyebrow mb-2">замечания</p>
-                            {item.issues.length === 0 ? <p className="text-sm text-slate-600 dark:text-slate-300">Замечаний не найдено.</p> : (
+                            {uniqueIssues(item.issues).length === 0 ? <p className="text-sm text-slate-600 dark:text-slate-300">Замечаний не найдено.</p> : (
                               <div className="grid gap-2">
-                                {item.issues.map((issue, index) => (
+                                {uniqueIssues(item.issues).map((issue, index) => (
                                   <div key={`${item.request_id}-${issue.term}-${index}`} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-[#38505c]">
                                     <div className="flex flex-wrap items-center gap-2">
                                       <strong>{issue.term}</strong>

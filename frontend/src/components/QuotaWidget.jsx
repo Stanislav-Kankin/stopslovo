@@ -37,7 +37,7 @@ export function QuotaWidget({ user }) {
           <p className="eyebrow">лимиты</p>
           <p className="text-base font-semibold leading-tight text-[#1a1a18] dark:text-[#f4f7f2]">{planLabels[user.plan] || user.plan}</p>
         </div>
-        <Meter label="Символы в месяц" used={user.chars_used ?? 0} limit={user.chars_limit ?? 0} />
+        <Meter label="Слова в месяц" used={user.chars_used ?? 0} limit={user.chars_limit ?? 0} />
         <Meter label="Строки файлов в месяц" used={user.rows_used ?? 0} limit={user.rows_limit ?? 0} />
       </div>
     </section>

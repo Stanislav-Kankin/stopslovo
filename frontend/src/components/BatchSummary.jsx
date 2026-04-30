@@ -7,10 +7,22 @@ const riskLabels = {
 
 const riskWeight = { high: 4, medium: 3, low: 2, safe: 1 };
 
+function uniqueIssues(issues = []) {
+  const map = new Map();
+  for (const issue of issues) {
+    const key = `${issue.normalized || issue.term.toLowerCase()}|${issue.category || ""}`;
+    const current = map.get(key);
+    if (!current || riskWeight[issue.risk] > riskWeight[current.risk]) {
+      map.set(key, issue);
+    }
+  }
+  return [...map.values()];
+}
+
 export function aggregateByTerm(results) {
   const map = {};
   for (const result of results) {
-    for (const issue of result.issues) {
+    for (const issue of uniqueIssues(result.issues)) {
       const key = issue.normalized || issue.term.toLowerCase();
       if (!map[key]) {
         map[key] = {
