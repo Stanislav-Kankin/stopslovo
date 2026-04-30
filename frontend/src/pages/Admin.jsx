@@ -13,10 +13,13 @@ export function Admin({ user }) {
   const [data, setData] = useState(null);
   const [allowlistText, setAllowlistText] = useState("");
   const [allowlistSaved, setAllowlistSaved] = useState("");
+  const [grantEmail, setGrantEmail] = useState("");
+  const [grantPlan, setGrantPlan] = useState("agency_m");
+  const [grantDays, setGrantDays] = useState("");
+  const [grantSaved, setGrantSaved] = useState("");
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (!user?.is_admin) return;
+  const loadOverview = () => {
     fetch("/api/admin/overview", { credentials: "include" })
       .then(async (response) => {
         const payload = await response.json();
@@ -25,6 +28,11 @@ export function Admin({ user }) {
       })
       .then(setData)
       .catch((err) => setError(err.message));
+  };
+
+  useEffect(() => {
+    if (!user?.is_admin) return;
+    loadOverview();
     fetch("/api/admin/allowlist", { credentials: "include" })
       .then(async (response) => {
         const payload = await response.json();
@@ -54,6 +62,34 @@ export function Admin({ user }) {
       setAllowlistText((payload.terms || []).join("\n"));
       setAllowlistSaved(`Сохранено слов и фраз: ${(payload.terms || []).length}`);
       setTimeout(() => setAllowlistSaved(""), 1800);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const grantPlanToUser = async () => {
+    setError("");
+    setGrantSaved("");
+    try {
+      const body = {
+        email: grantEmail.trim(),
+        plan: grantPlan,
+        days: grantDays ? Number(grantDays) : null
+      };
+      const response = await fetch("/api/admin/users/plan", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || "Не удалось выдать тариф");
+      const until = payload.plan_expires_at ? ` до ${new Date(payload.plan_expires_at).toLocaleString("ru-RU")}` : " без срока окончания";
+      setGrantSaved(`${payload.email}: ${planLabels[payload.plan] || payload.plan}${until}`);
+      setGrantEmail("");
+      setGrantDays("");
+      loadOverview();
+      setTimeout(() => setGrantSaved(""), 3000);
     } catch (err) {
       setError(err.message);
     }
@@ -94,6 +130,41 @@ export function Admin({ user }) {
                 ))}
               </div>
             </div>
+          </div>
+
+          <div className="panel">
+            <p className="eyebrow">доступы</p>
+            <h2 className="section-title">Выдать тариф пользователю</h2>
+            <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
+              Пользователь должен сначала зарегистрироваться. Для безлимитного теста выбери «Агентство M» и оставь срок пустым.
+            </p>
+            <div className="grid gap-3 lg:grid-cols-[1fr_220px_180px_auto] lg:items-center">
+              <input
+                className="input"
+                type="email"
+                value={grantEmail}
+                onChange={(event) => setGrantEmail(event.target.value)}
+                placeholder="email коллеги"
+              />
+              <select className="input" value={grantPlan} onChange={(event) => setGrantPlan(event.target.value)}>
+                <option value="agency_m">Агентство M — безлимит</option>
+                <option value="agency_s">Агентство S</option>
+                <option value="freelancer">Фрилансер</option>
+                <option value="free">Бесплатный</option>
+                <option value="one_time">Разовая проверка</option>
+              </select>
+              <input
+                className="input"
+                type="number"
+                min="1"
+                max="3660"
+                value={grantDays}
+                onChange={(event) => setGrantDays(event.target.value)}
+                placeholder="дней, пусто = бессрочно"
+              />
+              <button className="primary-button" disabled={!grantEmail.trim()} onClick={grantPlanToUser}>Выдать</button>
+            </div>
+            {grantSaved && <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-300">{grantSaved}</p>}
           </div>
 
           <div className="panel">

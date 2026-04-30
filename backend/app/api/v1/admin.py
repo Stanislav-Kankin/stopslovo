@@ -1,5 +1,6 @@
 import os
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Annotated
 
@@ -19,6 +20,12 @@ ALLOWLIST_PATH = Path(__file__).resolve().parents[2] / "data" / "global_allowlis
 
 class AllowlistPayload(BaseModel):
     terms: list[str] = Field(default_factory=list, max_length=2000)
+
+
+class UserPlanPayload(BaseModel):
+    email: str = Field(..., min_length=3, max_length=320)
+    plan: str = Field(default="agency_m", pattern="^(free|freelancer|agency_s|agency_m|one_time)$")
+    days: int | None = Field(default=None, ge=1, le=3660)
 
 
 def require_admin(request: Request, session: Annotated[Session, Depends(get_session)]) -> User:
@@ -56,6 +63,32 @@ def overview(
             }
             for user in recent_users
         ],
+    }
+
+
+@router.post("/users/plan")
+def update_user_plan(
+    payload: UserPlanPayload,
+    _: Annotated[User, Depends(require_admin)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict:
+    email = payload.email.strip().lower()
+    user = session.exec(select(User).where(User.email == email)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь с такой почтой не найден. Сначала он должен зарегистрироваться или войти через OAuth.")
+
+    user.plan = payload.plan
+    user.plan_expires_at = datetime.utcnow() + timedelta(days=payload.days) if payload.days else None
+    user.updated_at = datetime.utcnow()
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return {
+        "id": user.id,
+        "email": user.email,
+        "plan": user.plan,
+        "plan_expires_at": user.plan_expires_at,
+        "updated_at": user.updated_at,
     }
 
 
