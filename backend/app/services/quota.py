@@ -100,6 +100,13 @@ def check_ai_quota(session: Session, user_id: str, plan: str, amount: int = 1, s
     return True
 
 
+def has_ai_quota(session: Session, user_id: str, plan: str, amount: int = 1, started_at: datetime | None = None) -> bool:
+    limits = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"])
+    record = get_or_create_usage(session, user_id, plan, started_at)
+    ai_limit = limits["ai_per_month"]
+    return ai_limit < 0 or record.ai_used + amount <= ai_limit
+
+
 def get_remaining(session: Session, user_id: str, plan: str, started_at: datetime | None = None) -> dict:
     limits = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"])
     record = get_or_create_usage(session, user_id, plan, started_at)

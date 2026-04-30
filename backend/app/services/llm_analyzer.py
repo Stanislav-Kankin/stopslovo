@@ -174,8 +174,11 @@ class LLMAnalyzer:
         if use_llm and self._has_provider_key():
             try:
                 if self.provider == "anthropic":
-                    return self._attach_sources(self._analyze_with_anthropic(text, context_type, flagged), flagged)
-                return self._attach_sources(self._analyze_with_deepseek(text, context_type, flagged), flagged)
+                    data = self._attach_sources(self._analyze_with_anthropic(text, context_type, flagged), flagged)
+                else:
+                    data = self._attach_sources(self._analyze_with_deepseek(text, context_type, flagged), flagged)
+                data["llm_used"] = True
+                return data
             except Exception as exc:
                 logger.exception("%s analysis failed: %s", self.provider, exc)
                 return self._fallback(text, context_type, flagged, llm_failed=True, llm_error=self._public_error(exc))
@@ -310,6 +313,7 @@ class LLMAnalyzer:
             "summary": summary,
             "manual_review_required": manual,
             "manual_review_reason": reason,
+            "llm_used": False,
         }
 
     @staticmethod

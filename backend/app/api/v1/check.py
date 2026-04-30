@@ -15,7 +15,7 @@ from app.services.latin_detector import LatinDetector
 from app.services.llm_analyzer import LLMAnalyzer
 from app.services.morpho_normalizer import MorphoNormalizer
 from app.services.preprocessor import TextPreprocessor
-from app.services.quota import check_ai_quota, check_quota
+from app.services.quota import check_ai_quota, check_quota, has_ai_quota
 from app.services.ran_lexicon import RanLexicon
 from app.services.report_generator import ReportGenerator
 
@@ -116,6 +116,7 @@ def process_request(payload: CheckTextRequest) -> dict:
     flagged = dictionary.check(tokens, latin, normalizer, payload.context_type, ran_lexicon)
     analysis = llm.analyze(clean_text, payload.context_type, flagged, use_llm=payload.use_llm)
     result = reporter.build(clean_text, payload.request_id, analysis)
+    result["_llm_used"] = bool(analysis.get("llm_used"))
     RESULTS[result["request_id"]] = result
     return result
 
@@ -135,9 +136,13 @@ def check_text(
     if payload.use_llm:
         if not user:
             effective_payload = payload.model_copy(update={"use_llm": False})
-        elif not check_ai_quota(session, user.id, _active_plan(user), started_at=user.created_at):
+        elif not has_ai_quota(session, user.id, _active_plan(user), started_at=user.created_at):
             effective_payload = payload.model_copy(update={"use_llm": False})
-    return process_request(effective_payload)
+    result = process_request(effective_payload)
+    if result.get("_llm_used") and user:
+        check_ai_quota(session, user.id, _active_plan(user), started_at=user.created_at)
+    result.pop("_llm_used", None)
+    return result
 
 
 @router.post("/batch", response_model=CheckBatchResponse)
@@ -150,7 +155,12 @@ def check_batch(
     user_id, plan, quota_started_at = _quota_identity(request, response, session)
     if not check_quota(session, user_id, plan, chars=0, rows=len(payload.items), started_at=quota_started_at):
         return _quota_error()
-    return {"items": [process_request(item) for item in payload.items]}
+    items = []
+    for item in payload.items:
+        result = process_request(item)
+        result.pop("_llm_used", None)
+        items.append(result)
+    return {"items": items}
 
 
 @router.get("/llm/status")
@@ -169,13 +179,15 @@ def refine_issue(
     if not user:
         return _ai_quota_error(status_code=401)
     user_id, plan = user.id, _active_plan(user)
-    if not check_ai_quota(session, user_id, plan, started_at=user.created_at):
+    if not has_ai_quota(session, user_id, plan, started_at=user.created_at):
         return _ai_quota_error()
     if not check_quota(session, user_id, plan, chars=_word_count(payload.text), rows=0, started_at=user.created_at):
         return _quota_error()
     clean_text = preprocessor.clean(payload.text)
     issue = payload.issue.model_dump()
     analysis = llm.analyze(clean_text, payload.context_type, [issue], use_llm=True)
+    if analysis.get("llm_used"):
+        check_ai_quota(session, user_id, plan, started_at=user.created_at)
     refined_issue = analysis["issues"][0] if analysis["issues"] else issue
     llm_explanation = _refine_explanation(refined_issue, analysis["summary"])
     refined_issue["ai_refined"] = True

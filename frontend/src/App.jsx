@@ -478,7 +478,7 @@ function HomePage({ me, refreshMe }) {
     setLoading(true);
     setError("");
     try {
-      setResult(await postJson("/api/v1/check/text", { text, context_type: DEFAULT_CONTEXT, excluded_terms: excludedTerms }));
+      setResult(await postJson("/api/v1/check/text", { text, context_type: DEFAULT_CONTEXT, use_llm: false, excluded_terms: excludedTerms }));
       await refreshMe();
     } catch (err) {
       setError(err.message);
