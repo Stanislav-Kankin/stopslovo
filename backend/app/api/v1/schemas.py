@@ -37,6 +37,8 @@ class Issue(BaseModel):
     replacements: list[str]
     sources: list[str] = Field(default_factory=list)
     keep_as_is: bool
+    ai_refined: bool = False
+    ai_summary: str | None = None
 
 
 class CheckTextResponse(BaseModel):
@@ -64,6 +66,7 @@ class RefineIssueRequest(BaseModel):
 class RefineIssueResponse(BaseModel):
     issue: Issue
     summary: str
+    llm_explanation: str
     rewritten_text: str
     manual_review_required: bool
     manual_review_reason: str | None

@@ -81,6 +81,19 @@ def _word_count(text: str) -> int:
     return len(re.findall(r"[\wА-Яа-яЁё-]+", text, flags=re.UNICODE))
 
 
+def _refine_explanation(issue: dict, summary: str) -> str:
+    risk = {
+        "high": "высокий",
+        "medium": "средний",
+        "low": "низкий",
+        "safe": "без замечаний",
+    }.get(issue.get("risk"), issue.get("risk", ""))
+    replacements = issue.get("replacements") or []
+    replacement_text = f" Рекомендуемые замены: {', '.join(replacements)}." if replacements else ""
+    reason = issue.get("reason") or summary
+    return f"ИИ уточнил термин «{issue.get('term', '')}»: риск — {risk}. {reason}{replacement_text}".strip()
+
+
 def process_request(payload: CheckTextRequest) -> dict:
     clean_text = preprocessor.clean(payload.text)
     tokens = preprocessor.tokenize(clean_text)
@@ -141,9 +154,13 @@ def refine_issue(
     issue = payload.issue.model_dump()
     analysis = llm.analyze(clean_text, payload.context_type, [issue], use_llm=True)
     refined_issue = analysis["issues"][0] if analysis["issues"] else issue
+    llm_explanation = _refine_explanation(refined_issue, analysis["summary"])
+    refined_issue["ai_refined"] = True
+    refined_issue["ai_summary"] = llm_explanation
     return {
         "issue": refined_issue,
         "summary": analysis["summary"],
+        "llm_explanation": llm_explanation,
         "rewritten_text": analysis["rewritten_text"],
         "manual_review_required": analysis["manual_review_required"],
         "manual_review_reason": analysis.get("manual_review_reason"),
