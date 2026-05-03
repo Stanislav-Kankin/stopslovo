@@ -11,6 +11,7 @@ from sqlmodel import Session, func, select
 from app.api.v1.auth import get_current_user
 from app.db import get_session
 from app.models.user import UsageRecord, User
+from app.services.quota import apply_early_renewal
 
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -77,8 +78,18 @@ def update_user_plan(
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь с такой почтой не найден. Сначала он должен зарегистрироваться или войти через OAuth.")
 
+    new_expires_at = datetime.utcnow() + timedelta(days=payload.days) if payload.days else None
+    if user.plan == payload.plan and user.plan_expires_at and new_expires_at and user.plan_expires_at > datetime.utcnow():
+        apply_early_renewal(
+            session=session,
+            user_id=user.id,
+            plan=user.plan,
+            old_expires_at=user.plan_expires_at,
+            new_expires_at=new_expires_at,
+            started_at=user.created_at,
+        )
     user.plan = payload.plan
-    user.plan_expires_at = datetime.utcnow() + timedelta(days=payload.days) if payload.days else None
+    user.plan_expires_at = new_expires_at
     user.updated_at = datetime.utcnow()
     session.add(user)
     session.commit()

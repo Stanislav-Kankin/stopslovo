@@ -1,76 +1,33 @@
-const planLabels = {
-  anon: "Без регистрации",
+import { Link } from "react-router-dom";
+
+const planNames = {
   free: "Бесплатный",
   freelancer: "Фрилансер",
   agency_s: "Агентство S",
   agency_m: "Агентство M",
-  one_time: "Разовая проверка"
+  one_time: "Разовая",
 };
 
 function formatLimit(value) {
-  return value < 0 ? "∞" : Number(value || 0).toLocaleString("ru-RU");
-}
-
-function formatRuDateTime(value) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (number) => String(number).padStart(2, "0");
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())} ${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()}`;
-}
-
-function renewalInfo(user) {
-  if (!user || user.plan === "anon") return null;
-  if (user.plan === "free" && user.quota_resets_at) {
-    return { label: "Обновится", value: formatRuDateTime(user.quota_resets_at) };
-  }
-  if (user.plan_expires_at) {
-    return { label: "Действует до", value: formatRuDateTime(user.plan_expires_at) };
-  }
-  if (["freelancer", "agency_s", "agency_m", "one_time"].includes(user.plan)) {
-    return { label: "Действует", value: "без даты окончания" };
-  }
-  return null;
-}
-
-function Meter({ label, used, limit }) {
-  const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 100;
-  const remaining = limit < 0 ? -1 : Math.max((limit || 0) - (used || 0), 0);
-  return (
-    <div className="grid gap-2">
-      <div className="flex items-center justify-between gap-3 text-sm font-medium text-[#65655d] dark:text-[#c1d0cc]">
-        <span>{label}</span>
-        <span>осталось {formatLimit(remaining)} / {formatLimit(limit)}</span>
-      </div>
-      <div className="h-3 overflow-hidden rounded-full border border-[#cbd0c2] bg-[#dfe3d8] shadow-inner dark:border-[#3b5361] dark:bg-[#2a3c4a]">
-        <div
-          className="h-full rounded-full bg-gradient-to-r from-[#3f760e] via-[#4f8e18] to-[#6cae35] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_1px_4px_rgba(74,124,16,0.35)] transition-all dark:from-[#63c384] dark:via-[#7ed59a] dark:to-[#a6ebba]"
-          style={{ width: `${percent}%` }}
-        />
-      </div>
-    </div>
-  );
+  return Number(value || 0).toLocaleString("ru-RU");
 }
 
 export function QuotaWidget({ user }) {
   if (!user) return null;
-  const renewal = renewalInfo(user);
+  const charsLeft = user.chars_remaining ?? null;
+  const isUnlimited = charsLeft === -1;
+
   return (
-    <section className="border-b border-[#e0e0da] bg-[#f7f7f4]/85 px-4 py-4 dark:border-[#38505c] dark:bg-[#1d2a34]/75">
-      <div className="mx-auto grid max-w-6xl gap-4 md:grid-cols-[220px_1fr_1fr_1fr] md:items-center">
-        <div>
-          <p className="eyebrow">лимиты</p>
-          <p className="text-base font-semibold leading-tight text-[#1a1a18] dark:text-[#f4f7f2]">{planLabels[user.plan] || user.plan}</p>
-          {renewal && renewal.value && (
-            <p className="mt-2 inline-flex rounded-full border border-[#d6d8cf] bg-white/70 px-3 py-1 text-xs font-medium text-[#65655d] shadow-sm dark:border-[#3b5361] dark:bg-[#243744]/70 dark:text-[#c1d0cc]">
-              {renewal.label}: {renewal.value}
-            </p>
-          )}
-        </div>
-        <Meter label="Лимит слов" used={user.chars_used ?? 0} limit={user.chars_limit ?? 0} />
-        <Meter label="Лимит строк файлов" used={user.rows_used ?? 0} limit={user.rows_limit ?? 0} />
-        <Meter label="ИИ-подсказки" used={user.ai_used ?? 0} limit={user.ai_limit ?? 0} />
-      </div>
-    </section>
+    <Link
+      to="/pricing"
+      className="flex items-center gap-2 rounded-lg border border-[#e0e0da] bg-white/60 px-3 py-1.5 text-sm transition hover:border-[#4a7c10] dark:border-[#38505c] dark:bg-[#182630]/60 dark:hover:border-[#7ed59a]"
+    >
+      <span className="font-medium text-[#4a7c10] dark:text-[#7ed59a]">
+        {planNames[user.plan] ?? "Бесплатный"}
+      </span>
+      <span className="text-[#7a7a70] dark:text-[#94aaa3]">
+        {isUnlimited ? "без ограничений" : charsLeft !== null ? `${formatLimit(charsLeft)} слов осталось` : ""}
+      </span>
+    </Link>
   );
 }

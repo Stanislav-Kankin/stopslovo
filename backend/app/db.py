@@ -42,6 +42,10 @@ def ensure_usage_columns() -> None:
     }
     migrations = {
         "ai_used": "ALTER TABLE usagerecord ADD COLUMN ai_used INTEGER DEFAULT 0",
+        "chars_rollover": "ALTER TABLE usagerecord ADD COLUMN chars_rollover INTEGER DEFAULT 0",
+        "rows_rollover": "ALTER TABLE usagerecord ADD COLUMN rows_rollover INTEGER DEFAULT 0",
+        "ai_rollover": "ALTER TABLE usagerecord ADD COLUMN ai_rollover INTEGER DEFAULT 0",
+        "rollover_expires_at": "ALTER TABLE usagerecord ADD COLUMN rollover_expires_at DATETIME",
     }
     with engine.begin() as connection:
         for name, statement in migrations.items():

@@ -224,6 +224,32 @@ function markAiRefined(issue, summary = "") {
   };
 }
 
+function QuotaExceededBanner() {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-[12px] border border-[#c8e6a0] bg-[#f0f7e6] p-5 dark:border-[#3d6020] dark:bg-[#1e2d10]">
+      <div>
+        <p className="font-semibold text-[#2d5010] dark:text-[#a8d870]">Лимит на этот месяц исчерпан</p>
+        <p className="mt-1 text-sm text-[#4a7c10] dark:text-[#7eb850]">Обновите тариф чтобы продолжить проверку</p>
+      </div>
+      <Link to="/pricing" className="primary-button whitespace-nowrap">Смотреть тарифы</Link>
+    </div>
+  );
+}
+
+function UpgradeAfterCheckBanner({ user, result }) {
+  if (!result || result.overall_risk === "safe" || user?.plan !== "free") return null;
+  return (
+    <div className="mt-4 rounded-[10px] border border-[#c8e6a0] bg-[#f5faf0] px-4 py-3 text-sm dark:border-[#3d6020] dark:bg-[#1a2810]">
+      <span className="text-[#4a7c10] dark:text-[#7eb850]">
+        Нашли нарушения? На тарифе «Фрилансер» можно проверить весь рекламный аккаунт за раз.
+      </span>
+      <Link to="/pricing" className="ml-2 font-semibold text-[#4a7c10] underline dark:text-[#7ed59a]">
+        Смотреть тарифы →
+      </Link>
+    </div>
+  );
+}
+
 function HighlightedText({ text, issues }) {
   const terms = uniqueIssues(issues).filter((issue) => ["high", "medium"].includes(issue.risk)).map((issue) => issue.term);
   if (!terms.length) return <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">{text}</p>;
@@ -374,6 +400,7 @@ function HomePage({ me, refreshMe }) {
   const [excludedTermsText, setExcludedTermsText] = useState("");
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [quotaExceeded, setQuotaExceeded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [batchRows, setBatchRows] = useState([]);
   const [batchResults, setBatchResults] = useState([]);
@@ -477,11 +504,16 @@ function HomePage({ me, refreshMe }) {
   const checkSingle = async () => {
     setLoading(true);
     setError("");
+    setQuotaExceeded(false);
     try {
       setResult(await postJson("/api/v1/check/text", { text, context_type: DEFAULT_CONTEXT, use_llm: false, excluded_terms: excludedTerms }));
       await refreshMe();
     } catch (err) {
-      setError(err.message);
+      if (err.payload?.error === "quota_exceeded") {
+        setQuotaExceeded(true);
+      } else {
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -491,6 +523,7 @@ function HomePage({ me, refreshMe }) {
     const key = issueKey(issue);
     setRefiningIssue(key);
     setError("");
+    setQuotaExceeded(false);
     try {
       const data = await postJson("/api/v1/check/refine", { text: result.original_text, context_type: DEFAULT_CONTEXT, issue });
       const refinedIssue = markAiRefined(data.issue, data.llm_explanation || data.summary);
@@ -504,7 +537,11 @@ function HomePage({ me, refreshMe }) {
       }));
       await refreshMe();
     } catch (err) {
-      setError(err.message);
+      if (err.payload?.error === "quota_exceeded") {
+        setQuotaExceeded(true);
+      } else {
+        setError(err.message);
+      }
     } finally {
       setRefiningIssue("");
     }
@@ -520,6 +557,7 @@ function HomePage({ me, refreshMe }) {
 
     setRefiningIssue(targetKey);
     setError("");
+    setQuotaExceeded(false);
     try {
       const data = await postJson("/api/v1/check/refine", { text: sourceRow.original_text, context_type: DEFAULT_CONTEXT, issue: sourceIssue });
       const refinedIssue = {
@@ -539,7 +577,11 @@ function HomePage({ me, refreshMe }) {
       );
       await refreshMe();
     } catch (err) {
-      setError(err.message);
+      if (err.payload?.error === "quota_exceeded") {
+        setQuotaExceeded(true);
+      } else {
+        setError(err.message);
+      }
     } finally {
       setRefiningIssue("");
     }
@@ -575,6 +617,7 @@ function HomePage({ me, refreshMe }) {
   const checkBatch = async () => {
     setLoading(true);
     setError("");
+    setQuotaExceeded(false);
     setProgress(0);
     setBatchResults([]);
     setSelectedTerm("");
@@ -583,7 +626,7 @@ function HomePage({ me, refreshMe }) {
     try {
       const allowedRows = typeof rowsRemaining === "number" && rowsRemaining >= 0 ? rowsRemaining : batchRows.length;
       if (allowedRows <= 0) {
-        setError("Лимит строк для файлов исчерпан. Обновите тариф или дождитесь следующего месяца.");
+        setQuotaExceeded(true);
         setLoading(false);
         return;
       }
@@ -605,7 +648,11 @@ function HomePage({ me, refreshMe }) {
       setProgress(100);
       await refreshMe();
     } catch (err) {
-      setError(err.message);
+      if (err.payload?.error === "quota_exceeded") {
+        setQuotaExceeded(true);
+      } else {
+        setError(err.message);
+      }
       setProgress(0);
     } finally {
       setLoading(false);
@@ -676,8 +723,10 @@ function HomePage({ me, refreshMe }) {
               </div>
             </div>
           </section>
+          {quotaExceeded && <QuotaExceededBanner />}
           {error && <div className="error-box">{error}</div>}
-        <ResultView result={result} onRefineIssue={refineSingleIssue} refiningIssue={refiningIssue} canUseAi={canUseAi} aiUnavailableReason={aiUnavailableReason} />
+          <ResultView result={result} onRefineIssue={refineSingleIssue} refiningIssue={refiningIssue} canUseAi={canUseAi} aiUnavailableReason={aiUnavailableReason} />
+          <UpgradeAfterCheckBanner user={currentUser} result={result} />
         </>
       ) : (
         <section className="space-y-5">
@@ -716,6 +765,7 @@ function HomePage({ me, refreshMe }) {
             </div>
           </div>
 
+          {quotaExceeded && <QuotaExceededBanner />}
           {error && <div className="error-box">{error}</div>}
           <BatchSummary
             results={batchResults}
@@ -881,6 +931,7 @@ export default function App() {
               {user?.is_admin && <Link className="secondary-button hidden sm:inline-flex" to="/admin">Админка</Link>}
               {user ? (
                 <div className="flex items-center gap-2">
+                  <QuotaWidget user={user} />
                   <span className="hidden max-w-[180px] truncate rounded-full border border-[#e0e0da] px-3 py-1.5 text-xs font-medium text-[#7a7a70] dark:border-[#496574] dark:text-[#c1d0cc] lg:inline">{user.email}</span>
                   <button className="secondary-button" onClick={logout}><LogOut className="h-4 w-4" /> Выйти</button>
                 </div>
@@ -893,7 +944,6 @@ export default function App() {
             </div>
           </div>
         </header>
-        {user && <QuotaWidget user={user} />}
 
         <div className="mx-auto w-full max-w-6xl flex-1 space-y-6 px-4 py-8">
           <Routes>

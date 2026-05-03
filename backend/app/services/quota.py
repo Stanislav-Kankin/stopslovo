@@ -41,13 +41,13 @@ def next_monthly_renewal(started_at: datetime, now: datetime | None = None) -> d
     return candidate
 
 
-def current_month(plan: str, started_at: datetime | None = None) -> str:
+def current_month(plan: str, started_at: datetime | None = None, now: datetime | None = None) -> str:
     limits = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"])
     if limits.get("one_time"):
         return "one-time"
     if not started_at:
-        return datetime.utcnow().strftime("%Y-%m")
-    renewal = next_monthly_renewal(started_at)
+        return (now or datetime.utcnow()).strftime("%Y-%m")
+    renewal = next_monthly_renewal(started_at, now=now)
     previous_month = renewal.month - 1
     previous_year = renewal.year
     if previous_month == 0:
@@ -70,19 +70,68 @@ def get_or_create_usage(session: Session, user_id: str, plan: str, started_at: d
     return record
 
 
+def _rollover_valid(record: UsageRecord, now: datetime | None = None) -> bool:
+    now = now or datetime.utcnow()
+    expires_at = record.rollover_expires_at
+    if isinstance(expires_at, str):
+        try:
+            expires_at = datetime.fromisoformat(expires_at)
+        except ValueError:
+            return False
+    return bool(expires_at and expires_at > now)
+
+
+def _effective_rollover(record: UsageRecord, field: str) -> int:
+    if not _rollover_valid(record):
+        return 0
+    return max(int(getattr(record, field, 0) or 0), 0)
+
+
+def _rollover_expires_iso(record: UsageRecord) -> str | None:
+    if not _rollover_valid(record) or not record.rollover_expires_at:
+        return None
+    if isinstance(record.rollover_expires_at, str):
+        return record.rollover_expires_at
+    return record.rollover_expires_at.isoformat()
+
+
+def _can_spend(used: int, amount: int, limit: int, rollover: int) -> bool:
+    if limit < 0:
+        return True
+    return used + amount <= limit + rollover
+
+
+def _spend_with_rollover(record: UsageRecord, used_field: str, rollover_field: str, amount: int, limit: int) -> None:
+    if amount <= 0:
+        return
+    if limit < 0:
+        setattr(record, used_field, int(getattr(record, used_field, 0) or 0) + amount)
+        return
+    used = int(getattr(record, used_field, 0) or 0)
+    main_available = max(limit - used, 0)
+    if amount <= main_available:
+        setattr(record, used_field, used + amount)
+        return
+    overflow = amount - main_available
+    setattr(record, used_field, limit)
+    if _rollover_valid(record):
+        rollover = int(getattr(record, rollover_field, 0) or 0)
+        setattr(record, rollover_field, max(rollover - overflow, 0))
+
+
 def check_quota(session: Session, user_id: str, plan: str, chars: int = 0, rows: int = 0, started_at: datetime | None = None) -> bool:
     limits = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"])
     record = get_or_create_usage(session, user_id, plan, started_at)
 
     chars_limit = limits["chars_per_month"]
     rows_limit = limits["rows_per_month"]
-    chars_ok = chars_limit < 0 or record.chars_used + chars <= chars_limit
-    rows_ok = rows_limit < 0 or record.rows_used + rows <= rows_limit
+    chars_ok = _can_spend(record.chars_used, chars, chars_limit, _effective_rollover(record, "chars_rollover"))
+    rows_ok = _can_spend(record.rows_used, rows, rows_limit, _effective_rollover(record, "rows_rollover"))
     if not chars_ok or not rows_ok:
         return False
 
-    record.chars_used += chars
-    record.rows_used += rows
+    _spend_with_rollover(record, "chars_used", "chars_rollover", chars, chars_limit)
+    _spend_with_rollover(record, "rows_used", "rows_rollover", rows, rows_limit)
     session.add(record)
     session.commit()
     return True
@@ -92,9 +141,9 @@ def check_ai_quota(session: Session, user_id: str, plan: str, amount: int = 1, s
     limits = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"])
     record = get_or_create_usage(session, user_id, plan, started_at)
     ai_limit = limits["ai_per_month"]
-    if ai_limit >= 0 and record.ai_used + amount > ai_limit:
+    if not _can_spend(record.ai_used, amount, ai_limit, _effective_rollover(record, "ai_rollover")):
         return False
-    record.ai_used += amount
+    _spend_with_rollover(record, "ai_used", "ai_rollover", amount, ai_limit)
     session.add(record)
     session.commit()
     return True
@@ -104,7 +153,45 @@ def has_ai_quota(session: Session, user_id: str, plan: str, amount: int = 1, sta
     limits = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"])
     record = get_or_create_usage(session, user_id, plan, started_at)
     ai_limit = limits["ai_per_month"]
-    return ai_limit < 0 or record.ai_used + amount <= ai_limit
+    return _can_spend(record.ai_used, amount, ai_limit, _effective_rollover(record, "ai_rollover"))
+
+
+def apply_early_renewal(
+    session: Session,
+    user_id: str,
+    plan: str,
+    old_expires_at: datetime,
+    new_expires_at: datetime,
+    started_at: datetime | None,
+) -> None:
+    if old_expires_at <= datetime.utcnow() or new_expires_at <= old_expires_at:
+        return
+    limits = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"])
+    current_record = get_or_create_usage(session, user_id, plan, started_at)
+
+    def leftover(limit: int, used: int, rollover_field: str) -> int:
+        if limit < 0:
+            return 0
+        return max(limit - used, 0) + _effective_rollover(current_record, rollover_field)
+
+    chars_leftover = leftover(limits["chars_per_month"], current_record.chars_used, "chars_rollover")
+    rows_leftover = leftover(limits["rows_per_month"], current_record.rows_used, "rows_rollover")
+    ai_leftover = leftover(limits["ai_per_month"], current_record.ai_used, "ai_rollover")
+    if chars_leftover == 0 and rows_leftover == 0 and ai_leftover == 0:
+        return
+
+    new_month = current_month(plan, started_at, now=old_expires_at + timedelta(seconds=1))
+    new_record = session.exec(select(UsageRecord).where(UsageRecord.user_id == user_id, UsageRecord.month == new_month)).first()
+    if not new_record:
+        new_record = UsageRecord(user_id=user_id, month=new_month)
+        session.add(new_record)
+
+    new_record.chars_rollover = chars_leftover
+    new_record.rows_rollover = rows_leftover
+    new_record.ai_rollover = ai_leftover
+    new_record.rollover_expires_at = new_expires_at
+    session.add(new_record)
+    session.commit()
 
 
 def get_remaining(session: Session, user_id: str, plan: str, started_at: datetime | None = None) -> dict:
@@ -114,6 +201,10 @@ def get_remaining(session: Session, user_id: str, plan: str, started_at: datetim
     def remaining(limit: int, used: int) -> int:
         return -1 if limit < 0 else max(limit - used, 0)
 
+    chars_rollover = _effective_rollover(record, "chars_rollover")
+    rows_rollover = _effective_rollover(record, "rows_rollover")
+    ai_rollover = _effective_rollover(record, "ai_rollover")
+
     return {
         "chars_used": record.chars_used,
         "rows_used": record.rows_used,
@@ -121,7 +212,11 @@ def get_remaining(session: Session, user_id: str, plan: str, started_at: datetim
         "chars_limit": limits["chars_per_month"],
         "rows_limit": limits["rows_per_month"],
         "ai_limit": limits["ai_per_month"],
-        "chars_remaining": remaining(limits["chars_per_month"], record.chars_used),
-        "rows_remaining": remaining(limits["rows_per_month"], record.rows_used),
-        "ai_remaining": remaining(limits["ai_per_month"], record.ai_used),
+        "chars_remaining": -1 if limits["chars_per_month"] < 0 else max(limits["chars_per_month"] + chars_rollover - record.chars_used, 0),
+        "rows_remaining": -1 if limits["rows_per_month"] < 0 else max(limits["rows_per_month"] + rows_rollover - record.rows_used, 0),
+        "ai_remaining": -1 if limits["ai_per_month"] < 0 else max(limits["ai_per_month"] + ai_rollover - record.ai_used, 0),
+        "chars_rollover": chars_rollover,
+        "rows_rollover": rows_rollover,
+        "ai_rollover": ai_rollover,
+        "rollover_expires_at": _rollover_expires_iso(record),
     }

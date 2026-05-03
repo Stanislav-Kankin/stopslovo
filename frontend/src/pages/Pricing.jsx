@@ -1,28 +1,46 @@
 const plans = [
   {
+    id: "free",
+    name: "Бесплатный",
+    price: "0 ₽",
+    period: "навсегда",
+    highlight: false,
+    features: ["1 800 слов в месяц", "200 строк файлов в месяц", "5 ИИ-анализов в месяц", "Экспорт CSV"],
+  },
+  {
     id: "freelancer",
     name: "Фрилансер",
-    price: "1 990 ₽/мес",
-    features: ["До 3 клиентов", "10 000 слов в месяц", "5 000 строк файлов в месяц", "Экспорт XLSX / CSV"]
+    price: "1 990 ₽",
+    period: "в месяц",
+    highlight: false,
+    features: ["10 000 слов в месяц", "5 000 строк файлов в месяц", "ИИ-анализ без ограничений", "Экспорт XLSX / CSV", "До 3 клиентов"],
   },
   {
     id: "agency_s",
     name: "Агентство S",
-    price: "5 990 ₽/мес",
-    features: ["До 20 клиентов", "120 000 слов в месяц", "50 000 строк файлов в месяц", "Экспорт XLSX / CSV"]
+    price: "5 990 ₽",
+    period: "в месяц",
+    highlight: true,
+    badge: "Популярный",
+    features: ["120 000 слов в месяц", "50 000 строк файлов в месяц", "ИИ-анализ без ограничений", "Экспорт XLSX / CSV", "До 20 клиентов", "Приоритетная поддержка"],
   },
   {
     id: "agency_m",
     name: "Агентство M",
-    price: "12 990 ₽/мес",
-    features: ["Без лимита слов", "Без лимита строк файлов", "Полный отчёт", "Экспорт XLSX / CSV"]
+    price: "12 990 ₽",
+    period: "в месяц",
+    highlight: false,
+    features: ["Без лимита слов", "Без лимита строк файлов", "ИИ-анализ без ограничений", "Экспорт XLSX / CSV", "Неограниченное число клиентов", "Приоритетная поддержка"],
   },
   {
     id: "one_time",
     name: "Разовая проверка",
-    price: "490 ₽/файл",
-    features: ["Один файл до 2 000 строк", "До 5 000 слов в режиме текста", "ИИ-подсказки без лимита в рамках услуги", "Отчёт XLSX / CSV"]
-  }
+    price: "490 ₽",
+    period: "за файл",
+    highlight: false,
+    features: ["Один файл до 2 000 строк", "До 5 000 слов в режиме текста", "ИИ-анализ без ограничений", "Отчёт XLSX / CSV"],
+    note: "Идеально для разового аудита. После оплаты — ссылка на результат.",
+  },
 ];
 
 const planLabels = {
@@ -30,43 +48,122 @@ const planLabels = {
   freelancer: "Фрилансер",
   agency_s: "Агентство S",
   agency_m: "Агентство M",
-  one_time: "Разовая проверка"
+  one_time: "Разовая проверка",
 };
+
+function formatLimit(value) {
+  return value < 0 ? "∞" : Number(value || 0).toLocaleString("ru-RU");
+}
+
+function formatDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+}
+
+function daysUntil(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const diff = Math.ceil((date.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+  if (diff <= 0) return "сегодня";
+  return `${diff} дн.`;
+}
+
+function Meter({ label, used, limit, rollover, rolloverExpiresAt }) {
+  const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 100;
+  return (
+    <div className="grid gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 text-sm font-medium text-[#65655d] dark:text-[#c1d0cc]">
+        <span>{label}</span>
+        <span>{formatLimit(used)} / {formatLimit(limit)}</span>
+      </div>
+      <div className="h-3 overflow-hidden rounded-full border border-[#cbd0c2] bg-[#dfe3d8] shadow-inner dark:border-[#3b5361] dark:bg-[#2a3c4a]">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-[#3f760e] via-[#4f8e18] to-[#6cae35] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_1px_4px_rgba(74,124,16,0.35)] transition-all dark:from-[#63c384] dark:via-[#7ed59a] dark:to-[#a6ebba]"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      {rollover > 0 && (
+        <p className="text-xs text-[#7a7a70] dark:text-[#94aaa3]">
+          + {formatLimit(rollover)} перенесённых{rolloverExpiresAt ? `, сгорают ${formatDate(rolloverExpiresAt)}` : ""}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function CurrentPlan({ user }) {
+  if (!user) return null;
+  const renewalDate = user.plan === "free" ? user.quota_resets_at : user.plan_expires_at;
+  const renewalText = renewalDate
+    ? user.plan === "free"
+      ? `до обновления: ${daysUntil(renewalDate)}`
+      : `действует до: ${formatDate(renewalDate)}`
+    : null;
+  return (
+    <section className="panel">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="eyebrow">текущий план</p>
+          <h2 className="section-title">Ваш текущий тариф: {planLabels[user.plan] || user.plan}</h2>
+        </div>
+        {renewalText && <span className="rounded-full border border-[#d6d8cf] bg-white/70 px-3 py-1 text-xs font-medium text-[#65655d] dark:border-[#3b5361] dark:bg-[#243744]/70 dark:text-[#c1d0cc]">{renewalText}</span>}
+      </div>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Meter label="Слова" used={user.chars_used ?? 0} limit={user.chars_limit ?? 0} rollover={user.chars_rollover ?? 0} rolloverExpiresAt={user.rollover_expires_at} />
+        <Meter label="Строки файлов" used={user.rows_used ?? 0} limit={user.rows_limit ?? 0} rollover={user.rows_rollover ?? 0} rolloverExpiresAt={user.rollover_expires_at} />
+        <Meter label="ИИ-анализ" used={user.ai_used ?? 0} limit={user.ai_limit ?? 0} rollover={user.ai_rollover ?? 0} rolloverExpiresAt={user.rollover_expires_at} />
+      </div>
+    </section>
+  );
+}
 
 export function Pricing({ user }) {
   return (
-    <section className="space-y-5">
+    <section className="space-y-6">
       <div>
         <p className="eyebrow">тарифы</p>
         <h1 className="section-title">Выберите формат проверки</h1>
-        <p className="text-slate-600 dark:text-slate-300">
-          Сейчас оплата показана как заглушка. Подключение ЮKassa будет отдельным шагом.
-        </p>
+        <p className="text-slate-600 dark:text-slate-300">Сравните текущие лимиты и выберите тариф под объём рекламных текстов.</p>
       </div>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+
+      <CurrentPlan user={user} />
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         {plans.map((plan) => {
           const active = user?.plan === plan.id;
+          const cardClass = `${plan.highlight ? "panel-featured" : "plan-card"} flex min-h-[340px] flex-col ${active ? "ring-2 ring-[#4a7c10] dark:ring-[#7ed59a]" : ""}`;
           return (
-            <article key={plan.id} className={`panel flex min-h-[280px] flex-col ${active ? "ring-2 ring-[#4a7c10] dark:ring-[#7ed59a]" : ""}`}>
-              <div>
+            <article key={plan.id} className={cardClass}>
+              {plan.badge && <span className="absolute right-4 top-4 rounded-full bg-[#4a7c10] px-2 py-0.5 text-xs text-white">{plan.badge}</span>}
+              <div className={plan.badge ? "pr-24" : ""}>
                 <h2 className="text-xl font-semibold">{plan.name}</h2>
                 <p className="mt-2 text-2xl font-bold text-[#4a7c10] dark:text-[#7ed59a]">{plan.price}</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">{plan.period}</p>
               </div>
               <ul className="my-5 grid gap-2 text-sm text-slate-700 dark:text-slate-200">
                 {plan.features.map((feature) => <li key={feature}>• {feature}</li>)}
               </ul>
-              <button className={active ? "secondary-button mt-auto" : "primary-button mt-auto"} onClick={() => alert("Оплата будет подключена позже")}>
+              {plan.note && <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">{plan.note}</p>}
+              <button
+                className={active ? "secondary-button mt-auto cursor-default" : "primary-button mt-auto"}
+                disabled={active}
+                onClick={() => alert("Оплата через ЮKassa — скоро")}
+              >
                 {active ? "Текущий тариф" : "Выбрать тариф"}
               </button>
             </article>
           );
         })}
       </div>
-      {user && (
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Сейчас у вас тариф: {planLabels[user.plan] || user.plan}.
-        </p>
-      )}
+
+      <div className="panel text-sm text-slate-600 dark:text-slate-300">
+        <p>Все тарифы включают проверку по официальным словарям РАН и реестру ФАС.</p>
+        <p>Данные обновляются ежемесячно.</p>
+        <p>Это автоматическая оценка риска, не юридическое заключение.</p>
+      </div>
     </section>
   );
 }

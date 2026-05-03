@@ -28,3 +28,7 @@ class UsageRecord(SQLModel, table=True):
     chars_used: int = 0
     rows_used: int = 0
     ai_used: int = 0
+    chars_rollover: int = 0
+    rows_rollover: int = 0
+    ai_rollover: int = 0
+    rollover_expires_at: datetime | None = None

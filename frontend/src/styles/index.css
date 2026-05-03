@@ -17,11 +17,19 @@
 
 @layer components {
   .site-header {
-    @apply border-b border-[#e0e0da] bg-[#f0f0ec]/95 backdrop-blur transition-colors dark:border-[#38505c] dark:bg-[#1d2a34]/95;
+    @apply border-b border-[#e0e0da] bg-[#f0f0ec]/95 backdrop-blur shadow-[0_1px_8px_rgba(0,0,0,0.06)] transition-colors dark:border-[#38505c] dark:bg-[#1d2a34]/95 dark:shadow-[0_1px_8px_rgba(0,0,0,0.25)];
   }
 
   .panel {
-    @apply rounded-[10px] border border-[#e0e0da] bg-white p-5 shadow-sm transition-colors dark:border-[#38505c] dark:bg-[#22313b];
+    @apply rounded-[12px] border border-[#e0e0da] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.06),0_4px_16px_rgba(0,0,0,0.04)] transition-colors dark:border-[#38505c] dark:bg-[#22313b] dark:shadow-[0_1px_3px_rgba(0,0,0,0.3),0_4px_16px_rgba(0,0,0,0.2)];
+  }
+
+  .panel-featured {
+    @apply relative rounded-[12px] border-2 border-[#4a7c10] bg-white p-5 shadow-[0_4px_24px_rgba(74,124,16,0.15),0_1px_3px_rgba(0,0,0,0.06)] transition-colors dark:border-[#7ed59a] dark:bg-[#22313b] dark:shadow-[0_4px_24px_rgba(126,213,154,0.12)];
+  }
+
+  .plan-card {
+    @apply cursor-default rounded-[12px] border border-[#e0e0da] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.06),0_4px_16px_rgba(0,0,0,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_4px_20px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.06)] dark:border-[#38505c] dark:bg-[#22313b] dark:shadow-[0_1px_3px_rgba(0,0,0,0.3),0_4px_16px_rgba(0,0,0,0.2)] dark:hover:shadow-[0_4px_20px_rgba(0,0,0,0.35)];
   }
 
   .input {
@@ -29,7 +37,7 @@
   }
 
   .primary-button {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-[#4a7c10] px-4 py-2 font-semibold text-white transition hover:bg-[#3d680d] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#7ed59a] dark:text-[#102019] dark:hover:bg-[#9be6b4];
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-[#4a7c10] px-4 py-2 font-semibold text-white shadow-[0_1px_3px_rgba(74,124,16,0.25)] transition hover:bg-[#3d680d] hover:shadow-[0_2px_8px_rgba(74,124,16,0.3)] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#7ed59a] dark:text-[#102019] dark:hover:bg-[#9be6b4];
   }
 
   .secondary-button {
