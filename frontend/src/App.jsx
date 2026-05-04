@@ -375,22 +375,43 @@ function HighlightedText({ text, issues }) {
 }
 
 function HighlightedRewrite({ text, issues }) {
-  const replacements = issues
-    .filter((issue) => ["high", "medium"].includes(issue.risk))
-    .flatMap((issue) => issue.replacements || [])
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .sort((a, b) => b.length - a.length);
+  const markerPriority = { replacement: 3, high: 2, medium: 1 };
+  const markers = new Map();
+  const addMarker = (value, kind) => {
+    const term = String(value || "").trim();
+    if (!term) return;
+    const key = term.toLowerCase();
+    const current = markers.get(key);
+    if (!current || markerPriority[kind] > markerPriority[current.kind]) {
+      markers.set(key, { term, kind });
+    }
+  };
 
-  if (!replacements.length) return <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">{text}</p>;
+  for (const issue of uniqueIssues(issues)) {
+    if (!["high", "medium"].includes(issue.risk)) continue;
+    addMarker(issue.term, issue.risk);
+    addMarker(issue.normalized, issue.risk);
+    for (const replacement of issue.replacements || []) {
+      addMarker(replacement, "replacement");
+    }
+  }
 
-  const pattern = new RegExp(`(${replacements.map(escapeRegex).join("|")})`, "gi");
+  const terms = [...markers.values()].map((item) => item.term).sort((a, b) => b.length - a.length);
+  if (!terms.length) return <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">{text}</p>;
+
+  const pattern = new RegExp(`(${terms.map(escapeRegex).join("|")})`, "gi");
   return (
     <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">
       {text.split(pattern).map((part, index) => {
-        const changed = replacements.some((item) => item.toLowerCase() === part.toLowerCase());
-        if (!changed) return <span key={`${part}-${index}`}>{part}</span>;
-        return <mark key={`${part}-${index}`} className="rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-900 ring-1 ring-emerald-200 dark:bg-emerald-950 dark:text-emerald-100 dark:ring-emerald-800">{part}</mark>;
+        const marker = markers.get(part.toLowerCase());
+        if (!marker) return <span key={`${part}-${index}`}>{part}</span>;
+        const className = marker.kind === "replacement"
+          ? "bg-emerald-100 text-emerald-900 ring-1 ring-emerald-200 dark:bg-emerald-950 dark:text-emerald-100 dark:ring-emerald-800"
+          : marker.kind === "high"
+            ? "bg-red-100 text-red-900 ring-1 ring-red-200 dark:bg-red-950 dark:text-red-100 dark:ring-red-800"
+            : "bg-amber-100 text-amber-900 ring-1 ring-amber-200 dark:bg-amber-950 dark:text-amber-100 dark:ring-amber-800";
+        const title = marker.kind === "replacement" ? "Заменено на русский вариант" : "Осталось под вопросом";
+        return <mark key={`${part}-${index}`} title={title} className={`rounded px-1.5 py-0.5 ${className}`}>{part}</mark>;
       })}
     </p>
   );
