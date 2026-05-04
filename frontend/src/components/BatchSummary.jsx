@@ -133,7 +133,7 @@ export function aggregateByTerm(results) {
   return Object.values(map).sort((a, b) => riskWeight[b.sort_risk || b.risk] - riskWeight[a.sort_risk || a.risk] || b.count - a.count);
 }
 
-export function BatchSummary({ results, selectedTerm, onSelectTerm, onDownloadXlsx, onDownloadCsv, onRefineTerm, refiningTerm, canUseAi, aiUnavailableReason }) {
+export function BatchSummary({ results, selectedTerm, onSelectTerm, onDownloadXlsx, onDownloadCsv, onRefineTerm, onIgnoreTerm, refiningTerm, canUseAi, aiUnavailableReason }) {
   const terms = aggregateByTerm(results);
   const adsWithIssues = results.filter((item) => item.issues.length > 0).length;
 
@@ -221,6 +221,19 @@ export function BatchSummary({ results, selectedTerm, onSelectTerm, onDownloadXl
                   >
                     <AiRobotIcon />
                     {isRefining ? "Анализирую…" : "Уточнить через ИИ"}
+                  </button>
+                )}
+
+                {onIgnoreTerm && (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onIgnoreTerm(term);
+                    }}
+                    className="inline-flex items-center rounded-lg border border-[#d6d6cf] bg-white px-3 py-1.5 text-xs font-medium text-[#62625a] transition hover:border-[#4a7c10] hover:text-[#4a7c10] dark:border-[#38505c] dark:bg-[#182630] dark:text-[#c1d0cc] dark:hover:border-[#7ed59a] dark:hover:text-[#7ed59a]"
+                  >
+                    Игнорировать
                   </button>
                 )}
 

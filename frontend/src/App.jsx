@@ -230,6 +230,23 @@ function replaceIssue(issues = [], refined, targetIssue = null) {
   return replaced ? next : next;
 }
 
+function issueMatches(issue, targetIssue) {
+  if (!issue || !targetIssue) return false;
+  return issueKey(issue) === issueKey(targetIssue) || issueSoftKey(issue) === issueSoftKey(targetIssue);
+}
+
+function removeIssue(issues = [], targetIssue) {
+  return issues.filter((issue) => !issueMatches(issue, targetIssue));
+}
+
+function scoreIssues(issues = []) {
+  const unique = uniqueIssues(issues).filter((issue) => issue.risk !== "safe");
+  if (unique.some((issue) => issue.risk === "high")) return "high";
+  if (unique.some((issue) => issue.risk === "medium")) return "medium";
+  if (unique.some((issue) => issue.risk === "low")) return "low";
+  return "safe";
+}
+
 function markAiRefined(issue, summary = "") {
   return {
     ...issue,
@@ -260,6 +277,18 @@ function AiRefineButton({ disabled, loading, onClick }) {
     >
       <AiRobotIcon />
       {loading ? "Уточняем..." : "Уточнить через ИИ"}
+    </button>
+  );
+}
+
+function IgnoreIssueButton({ onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center rounded-lg border border-[#d6d6cf] bg-white px-3 py-1.5 text-xs font-medium text-[#62625a] transition hover:border-[#4a7c10] hover:text-[#4a7c10] dark:border-[#38505c] dark:bg-[#182630] dark:text-[#c1d0cc] dark:hover:border-[#7ed59a] dark:hover:text-[#7ed59a]"
+    >
+      Игнорировать
     </button>
   );
 }
@@ -426,7 +455,7 @@ function HighlightedRewrite({ text, issues }) {
   );
 }
 
-function ResultView({ result, onRefineIssue, refiningIssue, canUseAi, aiUnavailableReason }) {
+function ResultView({ result, onRefineIssue, onIgnoreIssue, refiningIssue, canUseAi, aiUnavailableReason }) {
   const [copied, setCopied] = useState(false);
   if (!result) return null;
   const issues = uniqueIssues(result.issues);
@@ -491,7 +520,7 @@ function ResultView({ result, onRefineIssue, refiningIssue, canUseAi, aiUnavaila
                   )}
                   <ReplacementChips replacements={issue.replacements} />
                   <IssueSources sources={issue.sources} />
-                  <div className="mt-3">
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
                     {canUseAi ? (
                       <AiRefineButton
                         disabled={refiningIssue === issueKey(issue)}
@@ -501,6 +530,7 @@ function ResultView({ result, onRefineIssue, refiningIssue, canUseAi, aiUnavaila
                     ) : (
                       <p className="text-xs text-slate-500 dark:text-slate-400">{aiUnavailableReason}</p>
                     )}
+                    <IgnoreIssueButton onClick={() => onIgnoreIssue?.(issue)} />
                   </div>
                 </article>
               ))}
@@ -708,6 +738,21 @@ function HomePage({ me, refreshMe }) {
     }
   };
 
+  const ignoreSingleIssue = (issue) => {
+    setResult((current) => {
+      if (!current) return current;
+      const issues = removeIssue(current.issues, issue);
+      const overallRisk = scoreIssues(issues);
+      return {
+        ...current,
+        issues,
+        overall_risk: overallRisk,
+        manual_review_required: overallRisk === "high" ? current.manual_review_required : false,
+        manual_review_reason: overallRisk === "high" ? current.manual_review_reason : null
+      };
+    });
+  };
+
   const refineBatchTerm = async (term) => {
     const targetKey = `${term.normalized || term.term.toLowerCase()}|${term.category || ""}`;
     const softTarget = term.normalized || term.term.toLowerCase();
@@ -751,6 +796,27 @@ function HomePage({ me, refreshMe }) {
       }
     } finally {
       setRefiningIssue("");
+    }
+  };
+
+  const ignoreBatchTerm = (term) => {
+    const softTarget = issueSoftKey(term);
+    setBatchResults((rows) =>
+      rows.map((row) => {
+        const issues = row.issues.filter((issue) => issueSoftKey(issue) !== softTarget);
+        if (issues.length === row.issues.length) return row;
+        const overallRisk = scoreIssues(issues);
+        return {
+          ...row,
+          issues,
+          overall_risk: overallRisk,
+          manual_review_required: overallRisk === "high" ? row.manual_review_required : false,
+          manual_review_reason: overallRisk === "high" ? row.manual_review_reason : null
+        };
+      })
+    );
+    if (selectedTerm === softTarget) {
+      setSelectedTerm("");
     }
   };
 
@@ -893,7 +959,7 @@ function HomePage({ me, refreshMe }) {
           </section>
           {quotaExceeded && <QuotaExceededBanner />}
           {error && <div className="error-box">{error}</div>}
-          <ResultView result={result} onRefineIssue={refineSingleIssue} refiningIssue={refiningIssue} canUseAi={canUseAi} aiUnavailableReason={aiUnavailableReason} />
+          <ResultView result={result} onRefineIssue={refineSingleIssue} onIgnoreIssue={ignoreSingleIssue} refiningIssue={refiningIssue} canUseAi={canUseAi} aiUnavailableReason={aiUnavailableReason} />
           <UpgradeAfterCheckBanner user={currentUser} result={result} />
         </>
       ) : (
@@ -942,6 +1008,7 @@ function HomePage({ me, refreshMe }) {
             onDownloadXlsx={exportXlsx}
             onDownloadCsv={exportCsv}
             onRefineTerm={refineBatchTerm}
+            onIgnoreTerm={ignoreBatchTerm}
             refiningTerm={refiningIssue}
             canUseAi={canUseAi}
             aiUnavailableReason={aiUnavailableReason}
