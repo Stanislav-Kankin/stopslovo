@@ -17,6 +17,9 @@ export function Admin({ user }) {
   const [grantPlan, setGrantPlan] = useState("agency_m");
   const [grantDays, setGrantDays] = useState("");
   const [grantSaved, setGrantSaved] = useState("");
+  const [usersData, setUsersData] = useState(null);
+  const [usersSearch, setUsersSearch] = useState("");
+  const [usersPage, setUsersPage] = useState(1);
   const [error, setError] = useState("");
 
   const loadOverview = () => {
@@ -30,9 +33,23 @@ export function Admin({ user }) {
       .catch((err) => setError(err.message));
   };
 
+  const loadUsers = (page = usersPage, search = usersSearch) => {
+    const params = new URLSearchParams({ page: String(page), limit: "20" });
+    if (search.trim()) params.set("search", search.trim());
+    fetch(`/api/admin/users?${params.toString()}`, { credentials: "include", cache: "no-store" })
+      .then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || "Не удалось загрузить пользователей");
+        return payload;
+      })
+      .then(setUsersData)
+      .catch((err) => setError(err.message));
+  };
+
   useEffect(() => {
     if (!user?.is_admin) return;
     loadOverview();
+    loadUsers(1, "");
     fetch("/api/admin/allowlist", { credentials: "include", cache: "no-store" })
       .then(async (response) => {
         const payload = await response.json();
@@ -42,6 +59,15 @@ export function Admin({ user }) {
       .then((payload) => setAllowlistText((payload.terms || []).join("\n")))
       .catch((err) => setError(err.message));
   }, [user]);
+
+  useEffect(() => {
+    if (!user?.is_admin) return;
+    const timeout = window.setTimeout(() => {
+      setUsersPage(1);
+      loadUsers(1, usersSearch);
+    }, 350);
+    return () => window.clearTimeout(timeout);
+  }, [usersSearch]);
 
   const saveAllowlist = async () => {
     setError("");
@@ -90,6 +116,7 @@ export function Admin({ user }) {
       setGrantEmail("");
       setGrantDays("");
       loadOverview();
+      loadUsers(usersPage, usersSearch);
       setTimeout(() => setGrantSaved(""), 3000);
     } catch (err) {
       setError(err.message);
@@ -188,16 +215,38 @@ export function Admin({ user }) {
           </div>
 
           <div className="panel">
-            <p className="eyebrow">последние пользователи</p>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="eyebrow">пользователи</p>
+                <h2 className="section-title">Поиск и управление</h2>
+              </div>
+              <input
+                className="input w-full max-w-sm"
+                value={usersSearch}
+                onChange={(event) => setUsersSearch(event.target.value)}
+                placeholder="Поиск по email"
+              />
+            </div>
             <div className="mt-3 overflow-hidden rounded-md border border-slate-200 dark:border-[#38505c]">
-              {data.recent_users.map((item) => (
-                <div key={item.id} className="grid gap-2 border-b border-slate-200 px-3 py-2 text-sm last:border-b-0 dark:border-[#38505c] md:grid-cols-[1fr_140px_180px]">
+              {(usersData?.items || data.recent_users).map((item) => (
+                <div key={item.id} className="grid gap-2 border-b border-slate-200 px-3 py-2 text-sm last:border-b-0 dark:border-[#38505c] md:grid-cols-[1fr_140px_170px_190px]">
                   <span className="font-medium">{item.email}</span>
                   <span>{planLabels[item.plan] || item.plan}</span>
+                  <span className="text-slate-500 dark:text-slate-400">{item.oauth_provider || "email"}</span>
                   <span className="text-slate-500 dark:text-slate-400">{new Date(item.created_at).toLocaleString("ru-RU")}</span>
+                  {item.oauth_email_placeholder && <span className="md:col-span-4 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">OAuth не вернул настоящую почту, пользователю нужно указать email</span>}
                 </div>
               ))}
             </div>
+            {usersData && (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600 dark:text-slate-300">
+                <span>Показано {usersData.items.length} из {usersData.total}. Страница {usersData.page} из {usersData.pages}.</span>
+                <div className="flex gap-2">
+                  <button className="secondary-button" disabled={usersPage <= 1} onClick={() => { const next = Math.max(1, usersPage - 1); setUsersPage(next); loadUsers(next, usersSearch); }}>Назад</button>
+                  <button className="secondary-button" disabled={usersData.page >= usersData.pages} onClick={() => { const next = usersPage + 1; setUsersPage(next); loadUsers(next, usersSearch); }}>Вперёд</button>
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}

@@ -1,3 +1,3 @@
-from app.models.user import CheckResult, UsageRecord, User
+from app.models.user import CheckResult, PaymentRecord, UsageRecord, User
 
-__all__ = ["CheckResult", "UsageRecord", "User"]
+__all__ = ["CheckResult", "PaymentRecord", "UsageRecord", "User"]

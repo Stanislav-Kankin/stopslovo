@@ -43,6 +43,10 @@ class AuthResponse(BaseModel):
     user: dict
 
 
+class UpdateEmailRequest(BaseModel):
+    email: EmailStr
+
+
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
@@ -128,6 +132,8 @@ def user_payload(user: User, session: Session) -> dict:
         "is_admin": user.email.lower() == ADMIN_EMAIL,
         "created_at": user.created_at,
         "updated_at": user.updated_at,
+        "oauth_provider": user.oauth_provider,
+        "oauth_email_placeholder": user.oauth_email_placeholder,
         "payment_provider": user.payment_provider,
         "payment_customer_id": user.payment_customer_id,
         "payment_subscription_id": user.payment_subscription_id,
@@ -198,7 +204,23 @@ def me(request: Request, session: Annotated[Session, Depends(get_session)]) -> d
     return {"authenticated": True, "user": user_payload(user, session)}
 
 
-def get_or_create_oauth_user(session: Session, provider: str, oauth_id: str, email: str) -> User:
+@router.post("/email", response_model=AuthResponse)
+def update_email(payload: UpdateEmailRequest, request: Request, session: Annotated[Session, Depends(get_session)]) -> dict:
+    user = get_current_user(request, session)
+    new_email = payload.email.lower()
+    existing = session.exec(select(User).where(User.email == new_email, User.id != user.id)).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Пользователь с такой почтой уже существует")
+    user.email = new_email
+    user.oauth_email_placeholder = False
+    user.updated_at = datetime.utcnow()
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return {"ok": True, "user": user_payload(user, session)}
+
+
+def get_or_create_oauth_user(session: Session, provider: str, oauth_id: str, email: str, email_placeholder: bool = False) -> User:
     user = session.exec(
         select(User).where(User.oauth_provider == provider, User.oauth_id == oauth_id)
     ).first()
@@ -208,11 +230,12 @@ def get_or_create_oauth_user(session: Session, provider: str, oauth_id: str, ema
     if existing:
         existing.oauth_provider = provider
         existing.oauth_id = oauth_id
+        existing.oauth_email_placeholder = email_placeholder
         session.add(existing)
         session.commit()
         session.refresh(existing)
         return existing
-    user = User(email=email.lower(), oauth_provider=provider, oauth_id=oauth_id)
+    user = User(email=email.lower(), oauth_provider=provider, oauth_id=oauth_id, oauth_email_placeholder=email_placeholder)
     session.add(user)
     session.commit()
     session.refresh(user)
@@ -284,8 +307,9 @@ async def vk_callback(code: str, response: Response, session: Annotated[Session,
         )
         token.raise_for_status()
         payload = token.json()
+    email_placeholder = not bool(payload.get("email"))
     email = payload.get("email") or f"vk-{payload['user_id']}@oauth.local"
-    user = get_or_create_oauth_user(session, "vk", str(payload["user_id"]), email)
+    user = get_or_create_oauth_user(session, "vk", str(payload["user_id"]), email, email_placeholder=email_placeholder)
     redirect = frontend_redirect("/")
     set_auth_cookie(redirect, create_token(user.id))
     return redirect

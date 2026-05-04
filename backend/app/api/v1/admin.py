@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 from sqlmodel import Session, func, select
 
@@ -64,6 +64,48 @@ def overview(
             }
             for user in recent_users
         ],
+    }
+
+
+@router.get("/users")
+def list_users(
+    _: Annotated[User, Depends(require_admin)],
+    session: Annotated[Session, Depends(get_session)],
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=20, ge=1, le=100),
+    search: str = Query(default="", max_length=320),
+) -> dict:
+    query = select(User)
+    count_query = select(func.count()).select_from(User)
+    search_value = search.strip().lower()
+    if search_value:
+        pattern = f"%{search_value}%"
+        query = query.where(User.email.ilike(pattern))
+        count_query = count_query.where(User.email.ilike(pattern))
+
+    total = session.exec(count_query).one()
+    users = session.exec(
+        query.order_by(User.created_at.desc()).offset((page - 1) * limit).limit(limit)
+    ).all()
+    return {
+        "items": [
+            {
+                "id": user.id,
+                "email": user.email,
+                "plan": user.plan,
+                "plan_expires_at": user.plan_expires_at,
+                "oauth_provider": user.oauth_provider,
+                "oauth_email_placeholder": user.oauth_email_placeholder,
+                "created_at": user.created_at,
+                "updated_at": user.updated_at,
+                "is_active": user.is_active,
+            }
+            for user in users
+        ],
+        "page": page,
+        "limit": limit,
+        "total": total,
+        "pages": max(1, (total + limit - 1) // limit),
     }
 
 

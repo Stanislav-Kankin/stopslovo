@@ -10,6 +10,7 @@ class User(SQLModel, table=True):
     hashed_password: str | None = None
     oauth_provider: str | None = None
     oauth_id: str | None = None
+    oauth_email_placeholder: bool = False
     plan: str = "free"
     plan_expires_at: datetime | None = None
     payment_provider: str | None = None
@@ -38,3 +39,18 @@ class CheckResult(SQLModel, table=True):
     id: str = Field(primary_key=True)
     data_json: str
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class PaymentRecord(SQLModel, table=True):
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
+    user_id: str = Field(foreign_key="user.id", index=True)
+    provider: str = "yookassa"
+    plan: str
+    amount_kopecks: int
+    currency: str = "RUB"
+    status: str = "pending"
+    external_payment_id: str | None = Field(default=None, index=True)
+    confirmation_url: str | None = None
+    raw_json: str | None = None
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)

@@ -15,6 +15,7 @@ def init_db() -> None:
     SQLModel.metadata.create_all(engine)
     ensure_user_columns()
     ensure_usage_columns()
+    ensure_payment_columns()
 
 
 def ensure_user_columns() -> None:
@@ -27,6 +28,7 @@ def ensure_user_columns() -> None:
         "payment_customer_id": "ALTER TABLE user ADD COLUMN payment_customer_id VARCHAR",
         "payment_subscription_id": "ALTER TABLE user ADD COLUMN payment_subscription_id VARCHAR",
         "last_payment_id": "ALTER TABLE user ADD COLUMN last_payment_id VARCHAR",
+        "oauth_email_placeholder": "ALTER TABLE user ADD COLUMN oauth_email_placeholder BOOLEAN DEFAULT 0",
         "updated_at": "ALTER TABLE user ADD COLUMN updated_at DATETIME",
     }
     with engine.begin() as connection:
@@ -46,6 +48,20 @@ def ensure_usage_columns() -> None:
         "rows_rollover": "ALTER TABLE usagerecord ADD COLUMN rows_rollover INTEGER DEFAULT 0",
         "ai_rollover": "ALTER TABLE usagerecord ADD COLUMN ai_rollover INTEGER DEFAULT 0",
         "rollover_expires_at": "ALTER TABLE usagerecord ADD COLUMN rollover_expires_at DATETIME",
+    }
+    with engine.begin() as connection:
+        for name, statement in migrations.items():
+            if name not in columns:
+                connection.execute(text(statement))
+
+
+def ensure_payment_columns() -> None:
+    columns = {
+        column["name"]
+        for column in inspect(engine).get_columns("paymentrecord")
+    }
+    migrations = {
+        "raw_json": "ALTER TABLE paymentrecord ADD COLUMN raw_json VARCHAR",
     }
     with engine.begin() as connection:
         for name, statement in migrations.items():
