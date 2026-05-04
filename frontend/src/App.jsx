@@ -205,15 +205,24 @@ function issueKey(issue) {
   return `${issue.normalized || issue.term.toLowerCase()}|${issue.category || ""}`;
 }
 
-function replaceIssue(issues = [], refined) {
+function issueSoftKey(issue) {
+  return (issue?.normalized || issue?.term || "").toLowerCase();
+}
+
+function replaceIssue(issues = [], refined, targetIssue = null) {
   const fullKey = issueKey(refined);
-  const softKey = refined.normalized || refined.term.toLowerCase();
+  const softKey = issueSoftKey(refined);
+  const targetFullKey = targetIssue ? issueKey(targetIssue) : "";
+  const targetSoftKey = targetIssue ? issueSoftKey(targetIssue) : "";
 
   let replaced = false;
   const next = issues.map((issue) => {
+    const currentSoftKey = issueSoftKey(issue);
     const match =
       issueKey(issue) === fullKey ||
-      (issue.normalized || issue.term.toLowerCase()) === softKey;
+      currentSoftKey === softKey ||
+      (targetFullKey && issueKey(issue) === targetFullKey) ||
+      (targetSoftKey && currentSoftKey === targetSoftKey);
     if (!match) return issue;
     replaced = true;
     return { ...issue, ...refined };
@@ -683,7 +692,7 @@ function HomePage({ me, refreshMe }) {
       const refinedIssue = markAiRefined(data.issue, data.llm_explanation || data.summary);
       setResult((current) => ({
         ...current,
-        issues: replaceIssue(current.issues, refinedIssue),
+        issues: replaceIssue(current.issues, refinedIssue, issue),
         manual_review_required: data.manual_review_required,
         manual_review_reason: data.manual_review_reason
       }));
@@ -727,7 +736,7 @@ function HomePage({ me, refreshMe }) {
           if (!hasIssue) return row;
           return {
             ...row,
-            issues: replaceIssue(row.issues, refinedIssue),
+            issues: replaceIssue(row.issues, refinedIssue, sourceIssue),
             manual_review_required: data.manual_review_required || row.manual_review_required,
             manual_review_reason: data.manual_review_reason || row.manual_review_reason
           };
