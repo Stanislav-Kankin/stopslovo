@@ -410,14 +410,30 @@ function ResultView({ result, onRefineIssue, refiningIssue, canUseAi, aiUnavaila
   };
 
   return (
-    <section className="grid gap-4 md:grid-cols-[1fr_280px] md:items-start">
-      <div className="space-y-5">
+    <section className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-2">
         <div className="panel">
           <p className="eyebrow">текст</p>
           <h2 className="section-title">Исходный текст</h2>
           <HighlightedText text={result.original_text} issues={result.issues} />
         </div>
 
+        <div className="panel">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="eyebrow">результат</p>
+              <h2 className="section-title">Переписанный текст</h2>
+            </div>
+            <button className="icon-button" onClick={copy} title="Скопировать">
+              {copied ? <Check className="h-4 w-4" /> : <Clipboard className="h-4 w-4" />}
+            </button>
+          </div>
+          <HighlightedRewrite text={result.rewritten_text} issues={result.issues} />
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-[1fr_280px] md:items-start">
+        <div className="space-y-5">
         <div className="panel">
           <p className="eyebrow">замечания</p>
           <h2 className="section-title">Замечания</h2>
@@ -463,7 +479,7 @@ function ResultView({ result, onRefineIssue, refiningIssue, canUseAi, aiUnavaila
         </div>
       </div>
 
-      <aside className="flex flex-col gap-3 md:sticky md:top-4">
+        <aside className="flex flex-col gap-3 md:sticky md:top-4">
         <div className="panel">
           <p className="eyebrow">общий результат</p>
           <div className="mb-3 flex items-start justify-between gap-3">
@@ -489,19 +505,6 @@ function ResultView({ result, onRefineIssue, refiningIssue, canUseAi, aiUnavaila
         </div>
 
         <div className="panel">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <p className="eyebrow">результат</p>
-              <h2 className="section-title">Переписанный текст</h2>
-            </div>
-            <button className="icon-button" onClick={copy} title="Скопировать">
-              {copied ? <Check className="h-4 w-4" /> : <Clipboard className="h-4 w-4" />}
-            </button>
-          </div>
-          <HighlightedRewrite text={result.rewritten_text} issues={result.issues} />
-        </div>
-
-        <div className="panel">
           <p className="eyebrow">резюме</p>
           <h2 className="section-title">Краткое резюме</h2>
           <p className="text-sm text-slate-700 dark:text-slate-200">{localizeSystemText(result.summary)}</p>
@@ -511,7 +514,8 @@ function ResultView({ result, onRefineIssue, refiningIssue, canUseAi, aiUnavaila
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>Это автоматическая оценка риска, не юридическое заключение. Для спорных случаев обратитесь к юристу.</span>
         </div>
-      </aside>
+        </aside>
+      </div>
     </section>
   );
 }
@@ -659,8 +663,6 @@ function HomePage({ me, refreshMe }) {
       setResult((current) => ({
         ...current,
         issues: replaceIssue(current.issues, refinedIssue),
-        rewritten_text: data.rewritten_text || current.rewritten_text,
-        summary: data.summary || current.summary,
         manual_review_required: data.manual_review_required,
         manual_review_reason: data.manual_review_reason
       }));

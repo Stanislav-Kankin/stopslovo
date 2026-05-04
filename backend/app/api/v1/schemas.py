@@ -70,3 +70,4 @@ class RefineIssueResponse(BaseModel):
     rewritten_text: str
     manual_review_required: bool
     manual_review_reason: str | None
+    llm_used: bool = True

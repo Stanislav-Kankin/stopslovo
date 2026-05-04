@@ -81,6 +81,36 @@ def _ai_quota_error(status_code: int = 402) -> JSONResponse:
     )
 
 
+def _ai_unavailable_error(reason: str | None = None) -> JSONResponse:
+    message = "ИИ сейчас не смог обработать уточнение. Попробуйте позже."
+    if reason:
+        message = f"{message} Причина: {reason}"
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": "llm_unavailable",
+            "message": message,
+        },
+    )
+
+
+def _term_context(text: str, term: str | None, max_chars: int = 3500) -> str:
+    if len(text) <= max_chars:
+        return text
+    if not term:
+        return text[:max_chars]
+
+    match = re.search(re.escape(term), text, flags=re.IGNORECASE)
+    if not match:
+        return text[:max_chars]
+
+    half = max_chars // 2
+    start = max(0, match.start() - half)
+    end = min(len(text), start + max_chars)
+    start = max(0, end - max_chars)
+    return text[start:end]
+
+
 def _word_count(text: str) -> int:
     return len(re.findall(r"[\wА-Яа-яЁё-]+", text, flags=re.UNICODE))
 
@@ -199,13 +229,15 @@ def refine_issue(
     user_id, plan = user.id, active_plan(user)
     if not has_ai_quota(session, user_id, plan, started_at=user.created_at):
         return _ai_quota_error()
-    if not check_quota(session, user_id, plan, chars=_word_count(payload.text), rows=0, started_at=user.created_at):
-        return _quota_error()
     clean_text = preprocessor.clean(payload.text)
     issue = payload.issue.model_dump()
-    analysis = llm.analyze(clean_text, payload.context_type, [issue], use_llm=True)
-    if analysis.get("llm_used"):
-        check_ai_quota(session, user_id, plan, started_at=user.created_at)
+    llm_text = _term_context(clean_text, issue.get("term") or issue.get("normalized"))
+    analysis = llm.analyze(llm_text, payload.context_type, [issue], use_llm=True)
+    llm_used = bool(analysis.get("llm_used"))
+    if not llm_used:
+        return _ai_unavailable_error(analysis.get("summary"))
+
+    check_ai_quota(session, user_id, plan, started_at=user.created_at)
     refined_issue = analysis["issues"][0] if analysis["issues"] else issue
     llm_explanation = _refine_explanation(refined_issue, analysis["summary"])
     refined_issue["ai_refined"] = True
@@ -217,6 +249,7 @@ def refine_issue(
         "rewritten_text": analysis["rewritten_text"],
         "manual_review_required": analysis["manual_review_required"],
         "manual_review_reason": analysis.get("manual_review_reason"),
+        "llm_used": llm_used,
     }
 
 
