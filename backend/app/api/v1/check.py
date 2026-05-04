@@ -1,21 +1,22 @@
+import json
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.api.v1.auth import get_user_from_request
 from app.api.v1.schemas import CheckBatchRequest, CheckBatchResponse, CheckTextRequest, CheckTextResponse, RefineIssueRequest, RefineIssueResponse
 from app.db import get_session
-from app.models.user import User
+from app.models.user import CheckResult, User
 from app.services.dictionary_checker import DictionaryChecker
 from app.services.latin_detector import LatinDetector
 from app.services.llm_analyzer import LLMAnalyzer
 from app.services.morpho_normalizer import MorphoNormalizer
 from app.services.preprocessor import TextPreprocessor
-from app.services.quota import check_ai_quota, check_quota, has_ai_quota
+from app.services.quota import active_plan, check_ai_quota, check_quota, has_ai_quota
 from app.services.ran_lexicon import RanLexicon
 from app.services.report_generator import ReportGenerator
 
@@ -28,8 +29,8 @@ ran_lexicon = RanLexicon()
 dictionary = DictionaryChecker()
 llm = LLMAnalyzer()
 reporter = ReportGenerator()
-RESULTS: dict[str, dict] = {}
 ANON_COOKIE = "stopslovo_anon_id"
+RESULT_TTL_HOURS = 24
 
 
 def _excluded_spans(text: str, excluded_terms: list[str]) -> list[tuple[int, int]]:
@@ -49,18 +50,10 @@ def _inside_spans(item: dict, spans: list[tuple[int, int]]) -> bool:
     return start is not None and end is not None and any(span_start <= start and end <= span_end for span_start, span_end in spans)
 
 
-def _active_plan(user: User | None) -> str:
-    if not user:
-        return "anon"
-    if user.plan_expires_at and user.plan_expires_at < datetime.utcnow():
-        return "free"
-    return user.plan
-
-
 def _quota_identity(request: Request, response: Response, session: Session) -> tuple[str, str, datetime | None]:
     user = get_user_from_request(request, session)
     if user:
-        return user.id, _active_plan(user), user.created_at
+        return user.id, active_plan(user), user.created_at
     anon_id = request.cookies.get(ANON_COOKIE) or str(uuid4())
     response.set_cookie(ANON_COOKIE, anon_id, max_age=365 * 24 * 60 * 60, httponly=True, samesite="lax")
     return f"anon:{anon_id}", "anon", None
@@ -92,6 +85,22 @@ def _word_count(text: str) -> int:
     return len(re.findall(r"[\wА-Яа-яЁё-]+", text, flags=re.UNICODE))
 
 
+def _save_result(session: Session, result: dict) -> None:
+    stored = {key: value for key, value in result.items() if not key.startswith("_")}
+    cutoff = datetime.utcnow() - timedelta(hours=RESULT_TTL_HOURS)
+    old_results = session.exec(select(CheckResult).where(CheckResult.created_at < cutoff).limit(100)).all()
+    for old_result in old_results:
+        session.delete(old_result)
+    session.merge(
+        CheckResult(
+            id=stored["request_id"],
+            data_json=json.dumps(stored, ensure_ascii=False, default=str),
+            created_at=datetime.utcnow(),
+        )
+    )
+    session.commit()
+
+
 def _refine_explanation(issue: dict, summary: str) -> str:
     risk = {
         "high": "высокий",
@@ -117,7 +126,6 @@ def process_request(payload: CheckTextRequest) -> dict:
     analysis = llm.analyze(clean_text, payload.context_type, flagged, use_llm=payload.use_llm)
     result = reporter.build(clean_text, payload.request_id, analysis)
     result["_llm_used"] = bool(analysis.get("llm_used"))
-    RESULTS[result["request_id"]] = result
     return result
 
 
@@ -136,12 +144,13 @@ def check_text(
     if payload.use_llm:
         if not user:
             effective_payload = payload.model_copy(update={"use_llm": False})
-        elif not has_ai_quota(session, user.id, _active_plan(user), started_at=user.created_at):
+        elif not has_ai_quota(session, user.id, active_plan(user), started_at=user.created_at):
             effective_payload = payload.model_copy(update={"use_llm": False})
     result = process_request(effective_payload)
     if result.get("_llm_used") and user:
-        check_ai_quota(session, user.id, _active_plan(user), started_at=user.created_at)
+        check_ai_quota(session, user.id, active_plan(user), started_at=user.created_at)
     result.pop("_llm_used", None)
+    _save_result(session, result)
     return result
 
 
@@ -152,14 +161,23 @@ def check_batch(
     response: Response,
     session: Session = Depends(get_session),
 ) -> dict | JSONResponse:
+    user = get_user_from_request(request, session)
     user_id, plan, quota_started_at = _quota_identity(request, response, session)
     if not check_quota(session, user_id, plan, chars=0, rows=len(payload.items), started_at=quota_started_at):
         return _quota_error()
+    llm_items_count = sum(1 for item in payload.items if item.use_llm)
+    use_llm_in_batch = bool(user and llm_items_count and has_ai_quota(session, user.id, active_plan(user), amount=llm_items_count, started_at=user.created_at))
     items = []
+    llm_used_count = 0
     for item in payload.items:
-        result = process_request(item)
+        effective_item = item if use_llm_in_batch else item.model_copy(update={"use_llm": False})
+        result = process_request(effective_item)
+        llm_used_count += 1 if result.get("_llm_used") else 0
         result.pop("_llm_used", None)
+        _save_result(session, result)
         items.append(result)
+    if llm_used_count and user:
+        check_ai_quota(session, user.id, active_plan(user), amount=llm_used_count, started_at=user.created_at)
     return {"items": items}
 
 
@@ -178,7 +196,7 @@ def refine_issue(
     user = get_user_from_request(request, session)
     if not user:
         return _ai_quota_error(status_code=401)
-    user_id, plan = user.id, _active_plan(user)
+    user_id, plan = user.id, active_plan(user)
     if not has_ai_quota(session, user_id, plan, started_at=user.created_at):
         return _ai_quota_error()
     if not check_quota(session, user_id, plan, chars=_word_count(payload.text), rows=0, started_at=user.created_at):
@@ -203,8 +221,12 @@ def refine_issue(
 
 
 @router.get("/{result_id}", response_model=CheckTextResponse)
-def get_result(result_id: str) -> dict:
-    result = RESULTS.get(result_id)
-    if not result:
+def get_result(result_id: str, session: Session = Depends(get_session)) -> dict:
+    record = session.get(CheckResult, result_id)
+    if not record:
         raise HTTPException(status_code=404, detail="Result not found")
-    return result
+    if record.created_at < datetime.utcnow() - timedelta(hours=RESULT_TTL_HOURS):
+        session.delete(record)
+        session.commit()
+        raise HTTPException(status_code=404, detail="Result not found")
+    return json.loads(record.data_json)

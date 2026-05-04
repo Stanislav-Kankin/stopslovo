@@ -1,4 +1,6 @@
 import os
+import time
+from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
@@ -12,19 +14,23 @@ from sqlmodel import Session, select
 
 from app.db import get_session
 from app.models.user import User
-from app.services.quota import get_remaining, next_monthly_renewal
+from app.services.quota import active_plan, get_remaining, next_monthly_renewal
 
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt"], deprecated="auto")
 
-JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
+JWT_SECRET = os.environ["JWT_SECRET"]
 JWT_ALGORITHM = "HS256"
 TOKEN_DAYS = 30
 COOKIE_NAME = "stopslovo_token"
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://127.0.0.1:5173")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@admin.ru").lower()
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
+SECURE_COOKIES = os.getenv("SECURE_COOKIES", "false").lower() == "true"
+AUTH_RATE_LIMIT_ATTEMPTS = int(os.getenv("AUTH_RATE_LIMIT_ATTEMPTS", "5"))
+AUTH_RATE_LIMIT_WINDOW = int(os.getenv("AUTH_RATE_LIMIT_WINDOW_SECONDS", "60"))
+AUTH_ATTEMPTS: dict[str, deque[float]] = defaultdict(deque)
 
 
 class AuthRequest(BaseModel):
@@ -56,13 +62,31 @@ def set_auth_cookie(response: Response, token: str) -> None:
         token,
         max_age=TOKEN_DAYS * 24 * 60 * 60,
         httponly=True,
-        secure=False,
+        secure=SECURE_COOKIES,
         samesite="lax",
     )
 
 
 def clear_auth_cookie(response: Response) -> None:
-    response.delete_cookie(COOKIE_NAME)
+    response.delete_cookie(COOKIE_NAME, secure=SECURE_COOKIES, samesite="lax")
+
+
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",", 1)[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def check_auth_rate_limit(request: Request, action: str) -> None:
+    now = time.monotonic()
+    key = f"{action}:{_client_ip(request)}"
+    attempts = AUTH_ATTEMPTS[key]
+    while attempts and now - attempts[0] > AUTH_RATE_LIMIT_WINDOW:
+        attempts.popleft()
+    if len(attempts) >= AUTH_RATE_LIMIT_ATTEMPTS:
+        raise HTTPException(status_code=429, detail="Слишком много попыток. Попробуйте позже.")
+    attempts.append(now)
 
 
 def get_user_from_request(request: Request, session: Session) -> User | None:
@@ -91,7 +115,7 @@ def get_current_user(
 
 
 def user_payload(user: User, session: Session) -> dict:
-    plan = "free" if user.plan_expires_at and user.plan_expires_at < datetime.utcnow() else user.plan
+    plan = active_plan(user)
     quota = get_remaining(session, user.id, plan, started_at=user.created_at)
     quota_resets_at = next_monthly_renewal(user.created_at) if plan == "free" else None
     return {
@@ -117,7 +141,8 @@ def frontend_redirect(path: str = "/") -> RedirectResponse:
 
 
 @router.post("/register", response_model=AuthResponse)
-def register(payload: AuthRequest, response: Response, session: Annotated[Session, Depends(get_session)]) -> dict:
+def register(payload: AuthRequest, request: Request, response: Response, session: Annotated[Session, Depends(get_session)]) -> dict:
+    check_auth_rate_limit(request, "register")
     existing = session.exec(select(User).where(User.email == payload.email.lower())).first()
     if existing:
         raise HTTPException(status_code=409, detail="Пользователь с такой почтой уже существует")
@@ -130,7 +155,8 @@ def register(payload: AuthRequest, response: Response, session: Annotated[Sessio
 
 
 @router.post("/login", response_model=AuthResponse)
-def login(payload: AuthRequest, response: Response, session: Annotated[Session, Depends(get_session)]) -> dict:
+def login(payload: AuthRequest, request: Request, response: Response, session: Annotated[Session, Depends(get_session)]) -> dict:
+    check_auth_rate_limit(request, "login")
     user = session.exec(select(User).where(User.email == payload.email.lower())).first()
     if not user and ADMIN_PASSWORD and payload.email.lower() == ADMIN_EMAIL and payload.password == ADMIN_PASSWORD:
         user = User(email=ADMIN_EMAIL, hashed_password=hash_password(payload.password), plan="agency_m")
@@ -139,6 +165,10 @@ def login(payload: AuthRequest, response: Response, session: Annotated[Session, 
         session.refresh(user)
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Неверная почта или пароль")
+    user.updated_at = datetime.utcnow()
+    session.add(user)
+    session.commit()
+    session.refresh(user)
     set_auth_cookie(response, create_token(user.id))
     return {"ok": True, "user": user_payload(user, session)}
 

@@ -32,3 +32,9 @@ class UsageRecord(SQLModel, table=True):
     rows_rollover: int = 0
     ai_rollover: int = 0
     rollover_expires_at: datetime | None = None
+
+
+class CheckResult(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    data_json: str
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)

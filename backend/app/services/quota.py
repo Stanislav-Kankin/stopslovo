@@ -15,6 +15,14 @@ PLAN_LIMITS = {
 }
 
 
+def active_plan(user) -> str:
+    if not user:
+        return "anon"
+    if user.plan_expires_at and user.plan_expires_at < datetime.utcnow():
+        return "free"
+    return user.plan
+
+
 def next_monthly_renewal(started_at: datetime, now: datetime | None = None) -> datetime:
     now = now or datetime.utcnow()
     base = started_at.replace(tzinfo=None)
