@@ -206,14 +206,19 @@ function issueKey(issue) {
 }
 
 function replaceIssue(issues = [], refined) {
-  const targetKey = issueKey(refined);
+  const fullKey = issueKey(refined);
+  const softKey = refined.normalized || refined.term.toLowerCase();
+
   let replaced = false;
   const next = issues.map((issue) => {
-    if (issueKey(issue) !== targetKey) return issue;
+    const match =
+      issueKey(issue) === fullKey ||
+      (issue.normalized || issue.term.toLowerCase()) === softKey;
+    if (!match) return issue;
     replaced = true;
     return { ...issue, ...refined };
   });
-  return replaced ? next : [...next, refined];
+  return replaced ? next : next;
 }
 
 function markAiRefined(issue, summary = "") {
@@ -673,10 +678,13 @@ function HomePage({ me, refreshMe }) {
 
   const refineBatchTerm = async (term) => {
     const targetKey = `${term.normalized || term.term.toLowerCase()}|${term.category || ""}`;
+    const softTarget = term.normalized || term.term.toLowerCase();
     const sourceRow = batchResults.find((row) =>
-      uniqueIssues(row.issues).some((issue) => issueKey(issue) === targetKey)
+      row.issues.some((issue) => (issue.normalized || issue.term.toLowerCase()) === softTarget)
     );
-    const sourceIssue = sourceRow?.issues.find((issue) => issueKey(issue) === targetKey);
+    const sourceIssue = sourceRow?.issues.find(
+      (issue) => (issue.normalized || issue.term.toLowerCase()) === softTarget
+    );
     if (!sourceRow || !sourceIssue) return;
 
     setRefiningIssue(targetKey);
@@ -690,7 +698,10 @@ function HomePage({ me, refreshMe }) {
       };
       setBatchResults((rows) =>
         rows.map((row) => {
-          if (!row.issues.some((issue) => issueKey(issue) === targetKey)) return row;
+          const hasIssue = row.issues.some(
+            (issue) => (issue.normalized || issue.term.toLowerCase()) === softTarget
+          );
+          if (!hasIssue) return row;
           return {
             ...row,
             issues: replaceIssue(row.issues, refinedIssue),
