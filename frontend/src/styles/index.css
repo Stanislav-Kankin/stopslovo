@@ -77,6 +77,12 @@
   }
 
   .segmented button.active {
-    @apply border border-[#c8c8c0] bg-white text-[#1a1a18] shadow-sm dark:border-[#496574] dark:bg-[#182630] dark:text-[#f4f7f2];
+    @apply border border-[#4a7c10] bg-[#4a7c10] text-white shadow-sm dark:border-[#7ed59a] dark:bg-[#7ed59a] dark:text-[#102019];
+  }
+
+  .check-textarea:focus {
+    outline: none;
+    box-shadow: 0 0 0 1px #4a7c10;
+    border-color: #4a7c10;
   }
 }

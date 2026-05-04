@@ -224,6 +224,109 @@ function markAiRefined(issue, summary = "") {
   };
 }
 
+function AiRobotIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="8" cy="8" r="5.5" stroke="#7ed59a" strokeWidth="1.2" />
+      <circle cx="5.8" cy="7.2" r="1" fill="#7ed59a" />
+      <circle cx="10.2" cy="7.2" r="1" fill="#7ed59a" />
+      <path d="M5.5 10.5 Q8 12.5 10.5 10.5" stroke="#7ed59a" strokeWidth="1.2" strokeLinecap="round" fill="none" />
+      <line x1="8" y1="2" x2="8" y2="2.5" stroke="#a8d870" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="8" cy="1.5" r="0.8" fill="#a8d870" />
+    </svg>
+  );
+}
+
+function AiRefineButton({ disabled, loading, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-[#4a7c10] bg-[#1a2e12] px-3 py-1.5 text-xs font-medium text-[#a8d870] transition hover:bg-[#213d17] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#0f1f0a] dark:hover:bg-[#1a2e12]"
+    >
+      <AiRobotIcon />
+      {loading ? "Уточняем..." : "Уточнить через ИИ"}
+    </button>
+  );
+}
+
+function ReplacementChips({ replacements = [] }) {
+  if (!replacements.length) return null;
+  return (
+    <div className="mb-2 mt-1.5 flex flex-wrap gap-1.5">
+      {replacements.map((replacement) => (
+        <button
+          key={replacement}
+          type="button"
+          onClick={() => navigator.clipboard.writeText(replacement)}
+          className="rounded-full border border-[#e0e0da] bg-[#f7f7f3] px-2.5 py-1 text-xs text-[#1a1a18] transition hover:border-[#4a7c10] hover:text-[#4a7c10] dark:border-[#38505c] dark:bg-[#182630] dark:text-[#f4f7f2] dark:hover:border-[#7ed59a] dark:hover:text-[#7ed59a]"
+          title="Копировать"
+        >
+          {replacement}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function IssueSources({ sources = [] }) {
+  const [showSources, setShowSources] = useState(false);
+  if (!sources.length) return null;
+  return (
+    <div className="mt-1">
+      <button
+        type="button"
+        onClick={() => setShowSources((value) => !value)}
+        className="text-[11px] text-slate-500 underline-offset-2 transition hover:underline dark:text-slate-400"
+      >
+        {showSources ? "Скрыть источники" : "Источники"}
+      </button>
+      {showSources && (
+        <p className="mt-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+          {sources.join(" · ")}
+        </p>
+      )}
+    </div>
+  );
+}
+
+const issueBorderLeft = {
+  high: "border-l-4 border-l-[#e24b4a]",
+  medium: "border-l-4 border-l-[#ef9f27]",
+  low: "border-l-4 border-l-[#888780]",
+  safe: "border-l-4 border-l-[#639922]",
+};
+
+const summaryRiskColor = {
+  high: "text-[#a32d2d] dark:text-red-200",
+  medium: "text-[#854f0b] dark:text-amber-200",
+  low: "text-[#585852] dark:text-slate-200",
+  safe: "text-[#3d6b10] dark:text-emerald-200",
+};
+
+function StatCell({ num, label, color }) {
+  return (
+    <div className="rounded-lg bg-[#f7f7f3] p-2 text-center dark:bg-[#182630]">
+      <p className="text-lg font-medium" style={{ color }}>{num}</p>
+      <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">{label}</p>
+    </div>
+  );
+}
+
+function RiskIcon({ risk }) {
+  const color = {
+    high: "#e24b4a",
+    medium: "#ef9f27",
+    low: "#888780",
+    safe: "#639922",
+  }[risk] || "#888780";
+  return (
+    <span className="inline-flex h-11 w-11 items-center justify-center rounded-full border-4 bg-white dark:bg-[#182630]" style={{ borderColor: color }}>
+      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
+    </span>
+  );
+}
+
 function QuotaExceededBanner() {
   return (
     <div className="flex items-center justify-between gap-4 rounded-[12px] border border-[#c8e6a0] bg-[#f0f7e6] p-5 dark:border-[#3d6020] dark:bg-[#1e2d10]">
@@ -292,6 +395,9 @@ function ResultView({ result, onRefineIssue, refiningIssue, canUseAi, aiUnavaila
   const [copied, setCopied] = useState(false);
   if (!result) return null;
   const issues = uniqueIssues(result.issues);
+  const highCount = issues.filter((issue) => issue.risk === "high").length;
+  const mediumCount = issues.filter((issue) => issue.risk === "medium").length;
+  const safeCount = issues.filter((issue) => issue.risk === "safe" || issue.risk === "low").length;
   const copy = async () => {
     await navigator.clipboard.writeText(result.rewritten_text);
     setCopied(true);
@@ -299,26 +405,84 @@ function ResultView({ result, onRefineIssue, refiningIssue, canUseAi, aiUnavaila
   };
 
   return (
-    <section className="space-y-5">
-      <div className="panel flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Общий риск</p>
-          <RiskBadge risk={result.overall_risk} />
-        </div>
-        {result.manual_review_required && (
-          <div className="flex max-w-xl items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{result.manual_review_reason || "Требуется ручная проверка"}</span>
-          </div>
-        )}
-      </div>
-
-      <div className="grid gap-5 lg:grid-cols-[1fr_0.9fr]">
+    <section className="grid gap-4 md:grid-cols-[1fr_280px] md:items-start">
+      <div className="space-y-5">
         <div className="panel">
           <p className="eyebrow">текст</p>
           <h2 className="section-title">Исходный текст</h2>
           <HighlightedText text={result.original_text} issues={result.issues} />
         </div>
+
+        <div className="panel">
+          <p className="eyebrow">замечания</p>
+          <h2 className="section-title">Замечания</h2>
+          {issues.length === 0 ? (
+            <p className="text-slate-600 dark:text-slate-300">Автоматическая проверка не нашла слов из зоны риска.</p>
+          ) : (
+            <div className="grid gap-3">
+              {issues.map((issue, index) => (
+                <article key={`${issue.term}-${index}`} className={`panel rounded-l-none p-4 ${issueBorderLeft[issue.risk] || issueBorderLeft.low}`}>
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <strong className="text-slate-950 dark:text-white">{issue.term}</strong>
+                    <RiskBadge risk={issue.risk} />
+                    {issue.ai_refined && (
+                      <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-100">
+                        Уточнено ИИ
+                      </span>
+                    )}
+                    <span className="text-sm text-slate-500 dark:text-slate-400">{issue.normalized}</span>
+                  </div>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">{issue.reason}</p>
+                  {issue.ai_refined && issue.ai_summary && (
+                    <p className="mt-2 rounded-md border border-sky-100 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-100">
+                      Вывод ИИ: {localizeSystemText(issue.ai_summary)}
+                    </p>
+                  )}
+                  <ReplacementChips replacements={issue.replacements} />
+                  <IssueSources sources={issue.sources} />
+                  <div className="mt-3">
+                    {canUseAi ? (
+                      <AiRefineButton
+                        disabled={refiningIssue === issueKey(issue)}
+                        loading={refiningIssue === issueKey(issue)}
+                        onClick={() => onRefineIssue?.(issue)}
+                      />
+                    ) : (
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{aiUnavailableReason}</p>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <aside className="flex flex-col gap-3 md:sticky md:top-4">
+        <div className="panel">
+          <p className="eyebrow">общий результат</p>
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              <p className={`text-xl font-medium ${summaryRiskColor[result.overall_risk] || summaryRiskColor.low}`}>
+                {riskLabels[result.overall_risk] || result.overall_risk}
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">риск нарушения</p>
+            </div>
+            <RiskIcon risk={result.overall_risk} />
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <StatCell num={highCount} label="высокий" color="#a32d2d" />
+            <StatCell num={mediumCount} label="средний" color="#854f0b" />
+            <StatCell num={safeCount} label="ок" color="#3d6b10" />
+          </div>
+          {result.manual_review_required && (
+            <div className="mt-3 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{result.manual_review_reason || "Требуется ручная проверка"}</span>
+            </div>
+          )}
+        </div>
+
         <div className="panel">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
@@ -331,65 +495,18 @@ function ResultView({ result, onRefineIssue, refiningIssue, canUseAi, aiUnavaila
           </div>
           <HighlightedRewrite text={result.rewritten_text} issues={result.issues} />
         </div>
-      </div>
 
-      <div className="panel">
-        <p className="eyebrow">замечания</p>
-        <h2 className="section-title">Замечания</h2>
-        {issues.length === 0 ? (
-          <p className="text-slate-600 dark:text-slate-300">Автоматическая проверка не нашла слов из зоны риска.</p>
-        ) : (
-          <div className="grid gap-3">
-            {issues.map((issue, index) => (
-              <article key={`${issue.term}-${index}`} className="rounded-md border border-slate-200 p-4 dark:border-[#38505c]">
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <strong className="text-slate-950 dark:text-white">{issue.term}</strong>
-                  <RiskBadge risk={issue.risk} />
-                  {issue.ai_refined && (
-                    <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-100">
-                      Уточнено ИИ
-                    </span>
-                  )}
-                  <span className="text-sm text-slate-500 dark:text-slate-400">{issue.normalized}</span>
-                </div>
-                <p className="text-sm text-slate-600 dark:text-slate-300">{issue.reason}</p>
-                {issue.ai_refined && issue.ai_summary && (
-                  <p className="mt-2 rounded-md border border-sky-100 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-100">
-                    Вывод ИИ: {localizeSystemText(issue.ai_summary)}
-                  </p>
-                )}
-                {issue.replacements.length > 0 && <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">Замены: {issue.replacements.join(", ")}</p>}
-                {issue.sources?.length > 0 && (
-                  <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                    Источники: {issue.sources.join("; ")}
-                  </p>
-                )}
-                {canUseAi ? (
-                  <button
-                    className="secondary-button mt-3 text-sm"
-                    disabled={refiningIssue === issueKey(issue)}
-                    onClick={() => onRefineIssue?.(issue)}
-                  >
-                    {refiningIssue === issueKey(issue) ? "Уточняем..." : "Уточнить через ИИ"}
-                  </button>
-                ) : (
-                  <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{aiUnavailableReason}</p>
-                )}
-              </article>
-            ))}
-          </div>
-        )}
-      </div>
+        <div className="panel">
+          <p className="eyebrow">резюме</p>
+          <h2 className="section-title">Краткое резюме</h2>
+          <p className="text-sm text-slate-700 dark:text-slate-200">{localizeSystemText(result.summary)}</p>
+        </div>
 
-      <div className="panel">
-        <p className="eyebrow">резюме</p>
-        <h2 className="section-title">Краткое резюме</h2>
-        <p className="text-slate-700 dark:text-slate-200">{localizeSystemText(result.summary)}</p>
-        <div className="mt-4 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+        <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>Это автоматическая оценка риска, не юридическое заключение. Для спорных случаев обратитесь к юристу.</span>
         </div>
-      </div>
+      </aside>
     </section>
   );
 }
@@ -430,6 +547,13 @@ function HomePage({ me, refreshMe }) {
   const currentUser = me?.authenticated ? me.user : null;
   const rowsRemaining = currentUser?.rows_remaining;
   const aiRemaining = currentUser?.ai_remaining;
+  const singleTextLimit = Number(currentUser?.chars_limit && currentUser.chars_limit > 0 ? currentUser.chars_limit : 1000);
+  const singleTextRatio = singleTextLimit > 0 ? text.length / singleTextLimit : 0;
+  const singleTextCounterClass = singleTextRatio > 0.95
+    ? "text-[#a32d2d]"
+    : singleTextRatio >= 0.8
+      ? "text-[#854f0b]"
+      : "text-slate-500 dark:text-slate-400";
   const canUseAi = Boolean(currentUser) && (aiRemaining === -1 || (typeof aiRemaining === "number" && aiRemaining > 0));
   const aiUnavailableReason = !currentUser
     ? "ИИ-подсказки доступны после входа."
@@ -714,10 +838,11 @@ function HomePage({ me, refreshMe }) {
         <>
           <section className="panel">
             <div className="grid gap-4">
-              <textarea className="input min-h-[140px] resize-y" value={text} onChange={(event) => setText(event.target.value)} />
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <span className="text-sm text-slate-500 dark:text-slate-400">{text.length} символов</span>
+            <textarea className="input check-textarea min-h-[140px] resize-y" value={text} onChange={(event) => setText(event.target.value)} />
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className={`text-sm ${singleTextCounterClass}`}>{text.length} символов</span>
                 <button className="primary-button" disabled={loading || !text.trim()} onClick={checkSingle}>
+                  <Search className="h-4 w-4" />
                   {loading ? "Проверяем..." : "Проверить"}
                 </button>
               </div>
