@@ -13,7 +13,7 @@ import { Register } from "./pages/Register";
 import { Terms } from "./pages/Terms";
 import { toCsv } from "./utils/csv";
 import { humanizeApiError } from "./utils/errors";
-import { exportResultsXlsx, exportUpdatedSourceXlsx } from "./utils/exportResults";
+import { exportResultsXlsx, exportUpdatedSourceCsv, exportUpdatedSourceXlsx } from "./utils/exportResults";
 import { importRowsFromFile } from "./utils/importRows";
 
 const BATCH_CHUNK_SIZE = 100;
@@ -690,6 +690,7 @@ function HomePage({ me, refreshMe }) {
   const [batchResults, setBatchResults] = useState([]);
   const [batchImportSummary, setBatchImportSummary] = useState("");
   const [batchImportColumns, setBatchImportColumns] = useState([]);
+  const [batchSourceMeta, setBatchSourceMeta] = useState({});
   const [progress, setProgress] = useState(0);
   const [sortDesc, setSortDesc] = useState(true);
   const [pageSize, setPageSize] = useState(20);
@@ -699,6 +700,7 @@ function HomePage({ me, refreshMe }) {
   const [refiningIssue, setRefiningIssue] = useState("");
   const [stateRestored, setStateRestored] = useState(false);
   const [batchShareUrl, setBatchShareUrl] = useState("");
+  const [replacementChoices, setReplacementChoices] = useState({});
 
   const excludedTerms = useMemo(() => parseExcludedTerms(excludedTermsText), [excludedTermsText]);
   const filteredResults = useMemo(
@@ -756,12 +758,14 @@ function HomePage({ me, refreshMe }) {
         setBatchResults(Array.isArray(saved.batchResults) ? saved.batchResults : []);
         setBatchImportSummary(saved.batchImportSummary || "");
         setBatchImportColumns(Array.isArray(saved.batchImportColumns) ? saved.batchImportColumns : []);
+        setBatchSourceMeta(saved.batchSourceMeta || {});
         setProgress(Number(saved.progress) || 0);
         setSortDesc(saved.sortDesc ?? true);
         setPageSize(Number(saved.pageSize) || 20);
         setPage(Number(saved.page) || 1);
         setExpandedResults(new Set(Array.isArray(saved.expandedResults) ? saved.expandedResults : []));
         setSelectedTerm(saved.selectedTerm || "");
+        setReplacementChoices(saved.replacementChoices || {});
       }
       setStateRestored(true);
     });
@@ -782,12 +786,14 @@ function HomePage({ me, refreshMe }) {
         batchResults,
         batchImportSummary,
         batchImportColumns,
+        batchSourceMeta,
         progress,
         sortDesc,
         pageSize,
         page,
         expandedResults: [...expandedResults],
-        selectedTerm
+        selectedTerm,
+        replacementChoices
       });
     }, 400);
     return () => window.clearTimeout(timeout);
@@ -800,12 +806,14 @@ function HomePage({ me, refreshMe }) {
     batchResults,
     batchImportSummary,
     batchImportColumns,
+    batchSourceMeta,
     progress,
     sortDesc,
     pageSize,
     page,
     expandedResults,
     selectedTerm,
+    replacementChoices,
     stateRestored
   ]);
 
@@ -949,8 +957,10 @@ function HomePage({ me, refreshMe }) {
       setBatchRows(normalizedRows);
       setBatchImportSummary(imported.summary);
       setBatchImportColumns(imported.columns);
+      setBatchSourceMeta(imported.meta || {});
       setBatchResults([]);
       setSelectedTerm("");
+      setReplacementChoices({});
       setExpandedResults(new Set());
       setPage(1);
       setProgress(0);
@@ -958,6 +968,8 @@ function HomePage({ me, refreshMe }) {
       setBatchRows([]);
       setBatchImportSummary("");
       setBatchImportColumns([]);
+      setBatchSourceMeta({});
+      setReplacementChoices({});
       setError(`Не удалось импортировать файл: ${err.message}`);
     }
   };
@@ -1023,7 +1035,17 @@ function HomePage({ me, refreshMe }) {
   };
 
   const exportUpdatedXlsx = () => {
-    exportUpdatedSourceXlsx(batchResults, batchRows);
+    exportUpdatedSourceXlsx(batchResults, batchRows, batchSourceMeta, replacementChoices);
+  };
+
+  const exportUpdatedCsv = () => {
+    exportUpdatedSourceCsv(batchResults, batchRows, batchSourceMeta, replacementChoices);
+  };
+
+  const selectReplacement = (term, replacement) => {
+    const key = String(term.normalized || term.term || "").toLowerCase();
+    if (!key) return;
+    setReplacementChoices((current) => ({ ...current, [key]: replacement }));
   };
 
   const shareSingleReport = async () => {
@@ -1140,7 +1162,10 @@ function HomePage({ me, refreshMe }) {
             onDownloadXlsx={exportXlsx}
             onDownloadCsv={exportCsv}
             onDownloadUpdatedXlsx={exportUpdatedXlsx}
+            onDownloadUpdatedCsv={exportUpdatedCsv}
             onShare={shareBatchReport}
+            replacementChoices={replacementChoices}
+            onSelectReplacement={selectReplacement}
             onRefineTerm={refineBatchTerm}
             onIgnoreTerm={ignoreBatchTerm}
             refiningTerm={refiningIssue}

@@ -102,6 +102,10 @@ function sheetFromRows(rows) {
   return XLSX.utils.json_to_sheet(rows);
 }
 
+function sheetFromTable(table) {
+  return XLSX.utils.aoa_to_sheet(table);
+}
+
 function applyResultStyles(worksheet, rows) {
   const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1:A1");
   for (let colIndex = range.s.c; colIndex <= range.e.c; colIndex += 1) {
@@ -129,11 +133,15 @@ function applyResultStyles(worksheet, rows) {
   }
 }
 
-function replaceCellText(value, issues = []) {
+function replacementKey(issue) {
+  return String(issue?.normalized || issue?.term || "").toLowerCase();
+}
+
+function replaceCellText(value, issues = [], replacementChoices = {}) {
   let next = String(value ?? "");
   for (const issue of uniqueIssues(issues)) {
     if (!["high", "medium"].includes(issue.risk)) continue;
-    const replacement = issue.replacements?.[0];
+    const replacement = replacementChoices[replacementKey(issue)] || issue.replacements?.[0];
     if (!replacement) continue;
     const variants = [issue.term, issue.normalized].filter(Boolean);
     for (const variant of variants) {
@@ -144,27 +152,100 @@ function replaceCellText(value, issues = []) {
   return next;
 }
 
-export function exportUpdatedSourceXlsx(rows, sourceRows = [], filename = "стопслово-для-загрузки.xlsx") {
+function updatedSourceTable(rows, sourceRows = [], sourceMeta = {}, replacementChoices = {}) {
   const resultsById = new Map(rows.map((row) => [row.request_id, row]));
-  const data = sourceRows.map((sourceRow) => {
+  const sourceTable = sourceMeta.source_table;
+  if (Array.isArray(sourceTable) && sourceTable.length) {
+    const table = sourceTable.map((row) => [...row]);
+    for (const sourceRow of sourceRows) {
+      const result = resultsById.get(sourceRow.request_id);
+      if (!result || sourceRow.source_row_index == null || !table[sourceRow.source_row_index]) continue;
+      for (const columnIndex of sourceRow.text_column_indexes || []) {
+        table[sourceRow.source_row_index][columnIndex] = replaceCellText(
+          table[sourceRow.source_row_index][columnIndex],
+          result.issues,
+          replacementChoices
+        );
+      }
+    }
+    return table;
+  }
+
+  const objects = sourceRows.map((sourceRow) => {
     const original = { ...(sourceRow.source || {}) };
     const result = resultsById.get(sourceRow.request_id);
     if (!result) return original;
     for (const column of sourceRow.text_columns || []) {
       if (Object.prototype.hasOwnProperty.call(original, column)) {
-        original[column] = replaceCellText(original[column], result.issues);
+        original[column] = replaceCellText(original[column], result.issues, replacementChoices);
       }
     }
     return original;
   });
+  return objects.length ? objects : rows.map((row) => [row.request_id, row.rewritten_text]);
+}
 
+export function exportUpdatedSourceXlsx(rows, sourceRows = [], sourceMeta = {}, replacementChoices = {}, filename = "стопслово-для-загрузки.xlsx") {
+  const table = updatedSourceTable(rows, sourceRows, sourceMeta, replacementChoices);
   const workbook = XLSX.utils.book_new();
-  const sheet = sheetFromRows(data.length ? data : rows.map((row) => ({
-    ID: row.request_id,
-    "Переписанный текст": row.rewritten_text,
-  })));
+  const sheet = Array.isArray(table[0]) ? sheetFromTable(table) : sheetFromRows(table);
   XLSX.utils.book_append_sheet(workbook, sheet, "Для загрузки");
   XLSX.writeFile(workbook, filename, { compression: true, cellStyles: true });
+}
+
+function escapeCsvCell(value, delimiter) {
+  const text = String(value ?? "");
+  if (text.includes('"') || text.includes("\n") || text.includes("\r") || text.includes(delimiter)) {
+    return `"${text.replaceAll('"', '""')}"`;
+  }
+  return text;
+}
+
+function serializeCsvTable(table, delimiter) {
+  return table.map((row) => row.map((cell) => escapeCsvCell(cell, delimiter)).join(delimiter)).join("\r\n");
+}
+
+function encodeUtf16LeWithBom(text) {
+  const bytes = new Uint8Array(2 + text.length * 2);
+  bytes[0] = 0xff;
+  bytes[1] = 0xfe;
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    bytes[2 + index * 2] = code & 0xff;
+    bytes[3 + index * 2] = code >> 8;
+  }
+  return bytes;
+}
+
+function encodeUtf8WithBom(text) {
+  const encoded = new TextEncoder().encode(text);
+  const bytes = new Uint8Array(3 + encoded.length);
+  bytes.set([0xef, 0xbb, 0xbf], 0);
+  bytes.set(encoded, 3);
+  return bytes;
+}
+
+export function exportUpdatedSourceCsv(rows, sourceRows = [], sourceMeta = {}, replacementChoices = {}, filename = "стопслово-для-загрузки.csv") {
+  const table = updatedSourceTable(rows, sourceRows, sourceMeta, replacementChoices);
+  const normalizedTable = Array.isArray(table[0])
+    ? table
+    : [
+        Object.keys(table[0] || {}),
+        ...table.map((row) => Object.values(row))
+      ];
+  const delimiter = sourceMeta.original_delimiter || ";";
+  const csv = serializeCsvTable(normalizedTable, delimiter);
+  const encoding = sourceMeta.original_encoding || "utf-8";
+  const payload = encoding === "utf-16le"
+    ? encodeUtf16LeWithBom(csv)
+    : encodeUtf8WithBom(csv);
+  const blob = new Blob([payload], { type: encoding === "utf-16le" ? "text/csv;charset=utf-16le" : "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export function exportResultsXlsx(rows, sourceRows = [], filename = "стопслово-результаты.xlsx") {

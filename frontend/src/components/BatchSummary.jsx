@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Download, FileSpreadsheet, Share2 } from "lucide-react";
 
 const riskLabels = {
   high: "Высокий",
@@ -136,7 +137,23 @@ export function aggregateByTerm(results) {
   return Object.values(map).sort((a, b) => riskWeight[b.sort_risk || b.risk] - riskWeight[a.sort_risk || a.risk] || b.count - a.count);
 }
 
-export function BatchSummary({ results, selectedTerm, onSelectTerm, onDownloadXlsx, onDownloadCsv, onDownloadUpdatedXlsx, onShare, onRefineTerm, onIgnoreTerm, refiningTerm, canUseAi, aiUnavailableReason }) {
+export function BatchSummary({
+  results,
+  selectedTerm,
+  onSelectTerm,
+  onDownloadXlsx,
+  onDownloadCsv,
+  onDownloadUpdatedXlsx,
+  onDownloadUpdatedCsv,
+  onShare,
+  replacementChoices = {},
+  onSelectReplacement,
+  onRefineTerm,
+  onIgnoreTerm,
+  refiningTerm,
+  canUseAi,
+  aiUnavailableReason
+}) {
   const terms = aggregateByTerm(results);
   const adsWithIssues = results.filter((item) => item.issues.length > 0).length;
 
@@ -151,10 +168,11 @@ export function BatchSummary({ results, selectedTerm, onSelectTerm, onDownloadXl
           Объявлений с замечаниями: {adsWithIssues} / {results.length}
         </div>
         <div className="flex flex-wrap gap-2">
-          {onShare && <button className="secondary-button" onClick={onShare}>Поделиться отчётом</button>}
-          {onDownloadUpdatedXlsx && <button className="primary-button" onClick={onDownloadUpdatedXlsx}>Скачать для загрузки</button>}
-          {onDownloadXlsx && <button className="primary-button" onClick={onDownloadXlsx}>Скачать XLSX</button>}
-          {onDownloadCsv && <button className="secondary-button" onClick={onDownloadCsv}>Скачать CSV</button>}
+          {onShare && <button className="secondary-button" onClick={onShare}><Share2 className="h-4 w-4" /> Поделиться отчётом</button>}
+          {onDownloadUpdatedXlsx && <button className="primary-button" onClick={onDownloadUpdatedXlsx}><FileSpreadsheet className="h-4 w-4" /> XLSX для загрузки</button>}
+          {onDownloadUpdatedCsv && <button className="secondary-button" onClick={onDownloadUpdatedCsv}><Download className="h-4 w-4" /> CSV для загрузки</button>}
+          {onDownloadXlsx && <button className="primary-button" onClick={onDownloadXlsx}><FileSpreadsheet className="h-4 w-4" /> Отчёт XLSX</button>}
+          {onDownloadCsv && <button className="secondary-button" onClick={onDownloadCsv}><Download className="h-4 w-4" /> Отчёт CSV</button>}
         </div>
       </div>
 
@@ -194,14 +212,29 @@ export function BatchSummary({ results, selectedTerm, onSelectTerm, onDownloadXl
                       type="button"
                       onClick={(event) => {
                         event.stopPropagation();
-                        navigator.clipboard.writeText(replacement);
+                        if (onSelectReplacement) {
+                          onSelectReplacement(term, replacement);
+                        } else {
+                          navigator.clipboard.writeText(replacement);
+                        }
                       }}
-                      title="Скопировать"
-                      className="rounded-full border border-[#e0e0da] bg-[#f7f7f3] px-2.5 py-0.5 text-xs text-[#1a1a18] transition hover:border-[#4a7c10] hover:text-[#4a7c10] dark:border-[#38505c] dark:bg-[#182630] dark:text-[#f4f7f2] dark:hover:border-[#7ed59a] dark:hover:text-[#7ed59a]"
+                      title={onSelectReplacement ? "Использовать эту замену в файле для загрузки" : "Скопировать"}
+                      className={`rounded-full border px-2.5 py-0.5 text-xs transition ${
+                        replacementChoices[String(term.normalized || term.term || "").toLowerCase()] === replacement
+                          ? "border-[#4a7c10] bg-[#eef5e6] font-semibold text-[#3d6b10] dark:border-[#7ed59a] dark:bg-[#1a2e12] dark:text-[#a8d870]"
+                          : "border-[#e0e0da] bg-[#f7f7f3] text-[#1a1a18] hover:border-[#4a7c10] hover:text-[#4a7c10] dark:border-[#38505c] dark:bg-[#182630] dark:text-[#f4f7f2] dark:hover:border-[#7ed59a] dark:hover:text-[#7ed59a]"
+                      }`}
                     >
                       {replacement}
                     </button>
                   ))}
+                  {onSelectReplacement && (
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {replacementChoices[String(term.normalized || term.term || "").toLowerCase()]
+                        ? "выбрана для экспорта"
+                        : "по умолчанию будет первая"}
+                    </span>
+                  )}
                 </div>
               )}
 

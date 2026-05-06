@@ -84,6 +84,10 @@ function cleanCell(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
+function cleanCellPreserveLines(value) {
+  return String(value ?? "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+}
+
 function isMeaningfulText(value) {
   const cleaned = cleanCell(value).toLowerCase();
   if (EMPTY_VALUES.has(cleaned)) return false;
@@ -136,9 +140,9 @@ function headerScore(row) {
 function rowsFromSheet(sheet) {
   const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false });
   const table = splitSingleColumnRows(raw)
-    .map((row) => row.map(cleanCell))
-    .filter((row) => row.some((cell) => cell));
-  if (!table.length) return [];
+    .map((row) => row.map(cleanCellPreserveLines));
+  const meaningfulTable = table.filter((row) => row.some((cell) => cleanCell(cell)));
+  if (!meaningfulTable.length) return { rows: [], meta: { source_table: table } };
 
   const headerIndex = table
     .map((row, index) => ({ index, score: headerScore(row) }))
@@ -151,17 +155,29 @@ function rowsFromSheet(sheet) {
     return count ? `${header}_${count + 1}` : header;
   });
 
-  return table.slice(headerIndex + 1).map((row) =>
-    Object.fromEntries(uniqueHeaders.map((header, index) => [header, row[index] ?? ""]))
-  );
+  const rows = table.slice(headerIndex + 1).map((row, offset) => ({
+    source_row_index: headerIndex + 1 + offset,
+    source_cells: row,
+    values: Object.fromEntries(uniqueHeaders.map((header, index) => [header, row[index] ?? ""]))
+  }));
+
+  return {
+    rows,
+    meta: {
+      source_table: table,
+      source_header_index: headerIndex,
+      source_headers: headers,
+      source_unique_headers: uniqueHeaders
+    }
+  };
 }
 
-function normalizeRows(rawRows) {
+function normalizeRows(rawRows, meta = {}) {
   if (!rawRows.length) {
-    return { rows: [], summary: "Файл пустой или не содержит строк с данными.", columns: [] };
+    return { rows: [], summary: "Файл пустой или не содержит строк с данными.", columns: [], meta };
   }
 
-  const headers = Object.keys(rawRows[0]);
+  const headers = Object.keys(rawRows[0].values || rawRows[0]);
   const idColumn = pickColumn(headers, ID_COLUMNS);
   const contextColumn = pickColumn(headers, CONTEXT_COLUMNS);
   let textColumns = headers.filter(isTextColumn);
@@ -183,15 +199,22 @@ function normalizeRows(rawRows) {
   }
 
   const rows = rawRows
-    .map((row, index) => {
+    .map((rawRow, index) => {
+      const row = rawRow.values || rawRow;
       const text = rowToText(row, textColumns);
       const contextValue = contextColumn ? row[contextColumn] : "";
+      const textColumnIndexes = textColumns
+        .map((column) => headers.indexOf(column))
+        .filter((columnIndex) => columnIndex >= 0);
       return {
         request_id: String((idColumn && row[idColumn]) || `row-${index + 1}`),
         text,
         context_type: isContext(contextValue) ? String(contextValue).trim() : "реклама",
         source: row,
-        text_columns: textColumns
+        source_cells: rawRow.source_cells || [],
+        source_row_index: rawRow.source_row_index,
+        text_columns: textColumns,
+        text_column_indexes: textColumnIndexes
       };
     })
     .filter((row) => isMeaningfulText(row.text));
@@ -199,8 +222,33 @@ function normalizeRows(rawRows) {
   return {
     rows,
     columns: textColumns,
+    meta,
     summary: `Импортировано строк: ${rows.length}. В текст объединены колонки: ${textColumns.join(", ") || "не найдены"}.`
   };
+}
+
+function detectTextEncoding(bytes) {
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return "utf-16le";
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return "utf-16be";
+  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) return "utf-8";
+  return "utf-8";
+}
+
+function decodeText(bytes) {
+  const encoding = detectTextEncoding(bytes);
+  return {
+    encoding,
+    text: new TextDecoder(encoding).decode(bytes)
+  };
+}
+
+function detectTextDelimiter(text) {
+  const lines = text.split(/\r?\n/).filter((line) => line.trim());
+  const sample = lines.slice(0, 10).join("\n");
+  const candidates = ["\t", ";", ","];
+  return candidates
+    .map((delimiter) => ({ delimiter, score: sample.split(delimiter).length }))
+    .sort((a, b) => b.score - a.score)[0]?.delimiter || ";";
 }
 
 function parseCsvWorkbook(text) {
@@ -213,14 +261,24 @@ function parseBinaryWorkbook(buffer) {
 
 export async function importRowsFromFile(file) {
   const extension = file.name.split(".").pop()?.toLowerCase();
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const decoded = extension === "csv" ? decodeText(bytes) : null;
   const workbook = extension === "csv"
-    ? parseCsvWorkbook(await file.text())
-    : parseBinaryWorkbook(await file.arrayBuffer());
+    ? parseCsvWorkbook(decoded.text)
+    : parseBinaryWorkbook(buffer);
   const firstSheetName = workbook.SheetNames[0];
   if (!firstSheetName) {
     return { rows: [], summary: "В файле не найдено листов.", columns: [] };
   }
   const sheet = workbook.Sheets[firstSheetName];
-  const rawRows = rowsFromSheet(sheet);
-  return normalizeRows(rawRows);
+  const parsed = rowsFromSheet(sheet);
+  const meta = {
+    ...parsed.meta,
+    original_filename: file.name,
+    original_extension: extension || "",
+    original_encoding: decoded?.encoding || "",
+    original_delimiter: decoded ? detectTextDelimiter(decoded.text) : "",
+  };
+  return normalizeRows(parsed.rows, meta);
 }
