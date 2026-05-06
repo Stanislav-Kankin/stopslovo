@@ -3,8 +3,8 @@ import { Link } from "react-router-dom";
 const planNames = {
   free: "Бесплатный",
   freelancer: "Фрилансер",
-  agency_s: "Агентство S",
-  agency_m: "Агентство M",
+  agency_s: "Команда",
+  agency_m: "Агентство",
   one_time: "Разовая",
 };
 

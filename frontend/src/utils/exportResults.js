@@ -129,6 +129,44 @@ function applyResultStyles(worksheet, rows) {
   }
 }
 
+function replaceCellText(value, issues = []) {
+  let next = String(value ?? "");
+  for (const issue of uniqueIssues(issues)) {
+    if (!["high", "medium"].includes(issue.risk)) continue;
+    const replacement = issue.replacements?.[0];
+    if (!replacement) continue;
+    const variants = [issue.term, issue.normalized].filter(Boolean);
+    for (const variant of variants) {
+      const pattern = new RegExp(`(?<![\\p{L}\\p{N}_-])${variant.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}_-])`, "giu");
+      next = next.replace(pattern, replacement);
+    }
+  }
+  return next;
+}
+
+export function exportUpdatedSourceXlsx(rows, sourceRows = [], filename = "стопслово-для-загрузки.xlsx") {
+  const resultsById = new Map(rows.map((row) => [row.request_id, row]));
+  const data = sourceRows.map((sourceRow) => {
+    const original = { ...(sourceRow.source || {}) };
+    const result = resultsById.get(sourceRow.request_id);
+    if (!result) return original;
+    for (const column of sourceRow.text_columns || []) {
+      if (Object.prototype.hasOwnProperty.call(original, column)) {
+        original[column] = replaceCellText(original[column], result.issues);
+      }
+    }
+    return original;
+  });
+
+  const workbook = XLSX.utils.book_new();
+  const sheet = sheetFromRows(data.length ? data : rows.map((row) => ({
+    ID: row.request_id,
+    "Переписанный текст": row.rewritten_text,
+  })));
+  XLSX.utils.book_append_sheet(workbook, sheet, "Для загрузки");
+  XLSX.writeFile(workbook, filename, { compression: true, cellStyles: true });
+}
+
 export function exportResultsXlsx(rows, sourceRows = [], filename = "стопслово-результаты.xlsx") {
   const summaryData = aggregateByTerm(rows).map((item) => ({
     "Слово": item.term,

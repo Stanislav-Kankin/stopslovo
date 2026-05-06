@@ -17,7 +17,7 @@ const plans = [
   },
   {
     id: "agency_s",
-    name: "Агентство S",
+    name: "Команда",
     price: "5 990 ₽",
     period: "в месяц",
     highlight: true,
@@ -26,7 +26,7 @@ const plans = [
   },
   {
     id: "agency_m",
-    name: "Агентство M",
+    name: "Агентство",
     price: "12 990 ₽",
     period: "в месяц",
     highlight: false,
@@ -46,8 +46,8 @@ const plans = [
 const planLabels = {
   free: "Бесплатный",
   freelancer: "Фрилансер",
-  agency_s: "Агентство S",
-  agency_m: "Агентство M",
+  agency_s: "Команда",
+  agency_m: "Агентство",
   one_time: "Разовая проверка",
 };
 

@@ -190,7 +190,8 @@ function normalizeRows(rawRows) {
         request_id: String((idColumn && row[idColumn]) || `row-${index + 1}`),
         text,
         context_type: isContext(contextValue) ? String(contextValue).trim() : "реклама",
-        source: row
+        source: row,
+        text_columns: textColumns
       };
     })
     .filter((row) => isMeaningfulText(row.text));

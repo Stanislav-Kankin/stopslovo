@@ -5,12 +5,12 @@ PLAN_CATALOG = {
         "duration_days": 30,
     },
     "agency_s": {
-        "name": "Агентство S",
+        "name": "Команда",
         "amount_kopecks": 599_000,
         "duration_days": 30,
     },
     "agency_m": {
-        "name": "Агентство M",
+        "name": "Агентство",
         "amount_kopecks": 1_299_000,
         "duration_days": 30,
     },

@@ -4,8 +4,8 @@ import { Link } from "react-router-dom";
 const planLabels = {
   free: "Бесплатный",
   freelancer: "Фрилансер",
-  agency_s: "Агентство S",
-  agency_m: "Агентство M",
+  agency_s: "Команда",
+  agency_m: "Агентство",
   one_time: "Разовая проверка"
 };
 
@@ -164,7 +164,7 @@ export function Admin({ user }) {
             <p className="eyebrow">доступы</p>
             <h2 className="section-title">Выдать тариф пользователю</h2>
             <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
-              Пользователь должен сначала зарегистрироваться. Для безлимитного теста выбери «Агентство M» и оставь срок пустым.
+              Пользователь должен сначала зарегистрироваться. Для безлимитного теста выбери «Агентство» и оставь срок пустым.
             </p>
             <div className="grid gap-3 lg:grid-cols-[1fr_220px_180px_auto] lg:items-center">
               <input
@@ -175,8 +175,8 @@ export function Admin({ user }) {
                 placeholder="email коллеги"
               />
               <select className="input" value={grantPlan} onChange={(event) => setGrantPlan(event.target.value)}>
-                <option value="agency_m">Агентство M — безлимит</option>
-                <option value="agency_s">Агентство S</option>
+                <option value="agency_m">Агентство — безлимит</option>
+                <option value="agency_s">Команда</option>
                 <option value="freelancer">Фрилансер</option>
                 <option value="free">Бесплатный</option>
                 <option value="one_time">Разовая проверка</option>

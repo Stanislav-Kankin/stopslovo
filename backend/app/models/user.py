@@ -41,6 +41,13 @@ class CheckResult(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
 
 
+class SharedReport(SQLModel, table=True):
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
+    kind: str
+    data_json: str
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
 class PaymentRecord(SQLModel, table=True):
     id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
     user_id: str = Field(foreign_key="user.id", index=True)

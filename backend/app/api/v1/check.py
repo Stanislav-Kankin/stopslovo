@@ -10,7 +10,7 @@ from sqlmodel import Session, select
 from app.api.v1.auth import get_user_from_request
 from app.api.v1.schemas import CheckBatchRequest, CheckBatchResponse, CheckTextRequest, CheckTextResponse, RefineIssueRequest, RefineIssueResponse
 from app.db import get_session
-from app.models.user import CheckResult, User
+from app.models.user import CheckResult, SharedReport, User
 from app.services.dictionary_checker import DictionaryChecker
 from app.services.latin_detector import LatinDetector
 from app.services.llm_analyzer import LLMAnalyzer
@@ -31,6 +31,7 @@ llm = LLMAnalyzer()
 reporter = ReportGenerator()
 ANON_COOKIE = "stopslovo_anon_id"
 RESULT_TTL_HOURS = 24
+SHARE_TTL_DAYS = 14
 
 
 def _excluded_spans(text: str, excluded_terms: list[str]) -> list[tuple[int, int]]:
@@ -129,6 +130,15 @@ def _save_result(session: Session, result: dict) -> None:
         )
     )
     session.commit()
+
+
+def _cleanup_shared_reports(session: Session) -> None:
+    cutoff = datetime.utcnow() - timedelta(days=SHARE_TTL_DAYS)
+    old_reports = session.exec(select(SharedReport).where(SharedReport.created_at < cutoff).limit(100)).all()
+    for old_report in old_reports:
+        session.delete(old_report)
+    if old_reports:
+        session.commit()
 
 
 def _refine_explanation(issue: dict, summary: str) -> str:
@@ -250,6 +260,41 @@ def refine_issue(
         "manual_review_required": analysis["manual_review_required"],
         "manual_review_reason": analysis.get("manual_review_reason"),
         "llm_used": llm_used,
+    }
+
+
+@router.post("/share")
+def create_shared_report(payload: dict, session: Session = Depends(get_session)) -> dict:
+    kind = payload.get("kind")
+    data = payload.get("data")
+    if kind not in {"single", "batch"} or not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="Некорректный отчёт для публикации")
+    _cleanup_shared_reports(session)
+    report = SharedReport(
+        kind=kind,
+        data_json=json.dumps(data, ensure_ascii=False, default=str),
+    )
+    session.add(report)
+    session.commit()
+    session.refresh(report)
+    return {"share_id": report.id, "url": f"/share/{report.id}", "expires_in_days": SHARE_TTL_DAYS}
+
+
+@router.get("/share/{share_id}")
+def get_shared_report(share_id: str, session: Session = Depends(get_session)) -> dict:
+    report = session.get(SharedReport, share_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    if report.created_at < datetime.utcnow() - timedelta(days=SHARE_TTL_DAYS):
+        session.delete(report)
+        session.commit()
+        raise HTTPException(status_code=404, detail="Report not found")
+    return {
+        "id": report.id,
+        "kind": report.kind,
+        "data": json.loads(report.data_json),
+        "created_at": report.created_at.isoformat(),
+        "expires_in_days": SHARE_TTL_DAYS,
     }
 
 

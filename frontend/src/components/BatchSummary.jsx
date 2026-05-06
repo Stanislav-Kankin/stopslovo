@@ -57,12 +57,15 @@ function SourcesToggle({ sources }) {
         }}
         className="text-[11px] text-slate-500 underline-offset-2 hover:underline dark:text-slate-400"
       >
-        {open ? "Скрыть источники" : "Источники"}
+        {open ? "Скрыть методику" : "Методика проверки"}
       </button>
       {open && (
-        <p className="mt-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-          {sources.join(" · ")}
-        </p>
+        <div className="mt-2 rounded-md border border-[#e0e0da] bg-[#f7f7f3] px-3 py-2 text-[11px] leading-relaxed text-slate-500 dark:border-[#38505c] dark:bg-[#182630] dark:text-slate-400">
+          <p className="mb-1 font-medium text-[#62625a] dark:text-[#c1d0cc]">Проверка опирается на словари риска сервиса и подключённые нормативные словари. Это не юридическое заключение.</p>
+          <ul className="grid gap-1">
+            {sources.map((source) => <li key={source}>• {source}</li>)}
+          </ul>
+        </div>
       )}
     </div>
   );
@@ -133,7 +136,7 @@ export function aggregateByTerm(results) {
   return Object.values(map).sort((a, b) => riskWeight[b.sort_risk || b.risk] - riskWeight[a.sort_risk || a.risk] || b.count - a.count);
 }
 
-export function BatchSummary({ results, selectedTerm, onSelectTerm, onDownloadXlsx, onDownloadCsv, onRefineTerm, onIgnoreTerm, refiningTerm, canUseAi, aiUnavailableReason }) {
+export function BatchSummary({ results, selectedTerm, onSelectTerm, onDownloadXlsx, onDownloadCsv, onDownloadUpdatedXlsx, onShare, onRefineTerm, onIgnoreTerm, refiningTerm, canUseAi, aiUnavailableReason }) {
   const terms = aggregateByTerm(results);
   const adsWithIssues = results.filter((item) => item.issues.length > 0).length;
 
@@ -148,8 +151,10 @@ export function BatchSummary({ results, selectedTerm, onSelectTerm, onDownloadXl
           Объявлений с замечаниями: {adsWithIssues} / {results.length}
         </div>
         <div className="flex flex-wrap gap-2">
-          <button className="primary-button" onClick={onDownloadXlsx}>Скачать XLSX</button>
-          <button className="secondary-button" onClick={onDownloadCsv}>Скачать CSV</button>
+          {onShare && <button className="secondary-button" onClick={onShare}>Поделиться отчётом</button>}
+          {onDownloadUpdatedXlsx && <button className="primary-button" onClick={onDownloadUpdatedXlsx}>Скачать для загрузки</button>}
+          {onDownloadXlsx && <button className="primary-button" onClick={onDownloadXlsx}>Скачать XLSX</button>}
+          {onDownloadCsv && <button className="secondary-button" onClick={onDownloadCsv}>Скачать CSV</button>}
         </div>
       </div>
 

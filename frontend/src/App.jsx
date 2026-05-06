@@ -1,6 +1,6 @@
 import { AlertTriangle, Check, Clipboard, FileText, LogIn, LogOut, Moon, Search, Sun } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link, Route, Routes } from "react-router-dom";
+import { Link, Route, Routes, useParams } from "react-router-dom";
 
 import { BatchSummary } from "./components/BatchSummary";
 import { Footer } from "./components/Footer";
@@ -13,7 +13,7 @@ import { Register } from "./pages/Register";
 import { Terms } from "./pages/Terms";
 import { toCsv } from "./utils/csv";
 import { humanizeApiError } from "./utils/errors";
-import { exportResultsXlsx } from "./utils/exportResults";
+import { exportResultsXlsx, exportUpdatedSourceXlsx } from "./utils/exportResults";
 import { importRowsFromFile } from "./utils/importRows";
 
 const BATCH_CHUNK_SIZE = 100;
@@ -156,6 +156,11 @@ async function getJson(url) {
   return parseResponse(response);
 }
 
+async function createShareReport(kind, data) {
+  const payload = await postJson("/api/v1/check/share", { kind, data });
+  return `${window.location.origin}${payload.url}`;
+}
+
 function chunkItems(items, size) {
   const chunks = [];
   for (let index = 0; index < items.length; index += size) {
@@ -247,6 +252,14 @@ function scoreIssues(issues = []) {
   return "safe";
 }
 
+function pageWindow(currentPage, totalPages) {
+  const pages = new Set([1, totalPages, currentPage]);
+  for (let page = currentPage - 2; page <= currentPage + 2; page += 1) {
+    if (page >= 1 && page <= totalPages) pages.add(page);
+  }
+  return [...pages].sort((a, b) => a - b);
+}
+
 function markAiRefined(issue, summary = "") {
   return {
     ...issue,
@@ -322,12 +335,15 @@ function IssueSources({ sources = [] }) {
         onClick={() => setShowSources((value) => !value)}
         className="text-[11px] text-slate-500 underline-offset-2 transition hover:underline dark:text-slate-400"
       >
-        {showSources ? "Скрыть источники" : "Источники"}
+        {showSources ? "Скрыть методику" : "Методика проверки"}
       </button>
       {showSources && (
-        <p className="mt-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-          {sources.join(" · ")}
-        </p>
+        <div className="mt-2 rounded-md border border-[#e0e0da] bg-[#f7f7f3] px-3 py-2 text-[11px] leading-relaxed text-slate-500 dark:border-[#38505c] dark:bg-[#182630] dark:text-slate-400">
+          <p className="mb-1 font-medium text-[#62625a] dark:text-[#c1d0cc]">Проверка опирается на словари риска сервиса и подключённые нормативные словари. Это не юридическое заключение.</p>
+          <ul className="grid gap-1">
+            {sources.map((source) => <li key={source}>• {source}</li>)}
+          </ul>
+        </div>
       )}
     </div>
   );
@@ -396,6 +412,67 @@ function UpgradeAfterCheckBanner({ user, result }) {
   );
 }
 
+function SharedReportPage() {
+  const { shareId } = useParams();
+  const [report, setReport] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setError("");
+    getJson(`/api/v1/check/share/${shareId}`)
+      .then(setReport)
+      .catch((err) => setError(err.message || "Не удалось открыть отчёт"));
+  }, [shareId]);
+
+  if (error) {
+    return (
+      <section className="panel">
+        <p className="eyebrow">публичный отчёт</p>
+        <h1 className="section-title">Отчёт недоступен</h1>
+        <p className="text-slate-600 dark:text-slate-300">{error}</p>
+      </section>
+    );
+  }
+
+  if (!report) {
+    return (
+      <section className="panel">
+        <p className="eyebrow">публичный отчёт</p>
+        <h1 className="section-title">Загружаем отчёт...</h1>
+      </section>
+    );
+  }
+
+  const createdAt = report.created_at ? new Date(report.created_at).toLocaleString("ru-RU") : "";
+  const singleResult = report.kind === "single" ? report.data?.result : null;
+  const batchResults = report.kind === "batch" ? report.data?.results || [] : [];
+
+  return (
+    <section className="space-y-5">
+      <div className="panel">
+        <p className="eyebrow">публичный отчёт</p>
+        <h1 className="section-title">Отчёт СтопСлово</h1>
+        <p className="text-sm text-slate-600 dark:text-slate-300">
+          Создан {createdAt}. Ссылка открывает результат без входа в аккаунт и действует ограниченное время.
+        </p>
+      </div>
+      {singleResult && <ResultView result={singleResult} canUseAi={false} />}
+      {batchResults.length > 0 && (
+        <BatchSummary
+          results={batchResults}
+          selectedTerm=""
+          onSelectTerm={() => {}}
+          canUseAi={false}
+        />
+      )}
+      <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+        <span>Это автоматическая оценка риска, не юридическое заключение. Для спорных случаев обратитесь к юристу.</span>
+      </div>
+    </section>
+  );
+}
+
 function HighlightedText({ text, issues }) {
   const terms = uniqueIssues(issues).filter((issue) => ["high", "medium"].includes(issue.risk)).map((issue) => issue.term);
   if (!terms.length) return <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">{text}</p>;
@@ -455,8 +532,10 @@ function HighlightedRewrite({ text, issues }) {
   );
 }
 
-function ResultView({ result, onRefineIssue, onIgnoreIssue, refiningIssue, canUseAi, aiUnavailableReason }) {
+function ResultView({ result, onRefineIssue, onIgnoreIssue, refiningIssue, canUseAi, aiUnavailableReason, onShare }) {
   const [copied, setCopied] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
+  const [sharing, setSharing] = useState(false);
   if (!result) return null;
   const issues = uniqueIssues(result.issues);
   const highCount = issues.filter((issue) => issue.risk === "high").length;
@@ -466,6 +545,17 @@ function ResultView({ result, onRefineIssue, onIgnoreIssue, refiningIssue, canUs
     await navigator.clipboard.writeText(result.rewritten_text);
     setCopied(true);
     setTimeout(() => setCopied(false), 1400);
+  };
+  const share = async () => {
+    if (!onShare) return;
+    setSharing(true);
+    try {
+      const url = await onShare();
+      setShareUrl(url);
+      await navigator.clipboard.writeText(url);
+    } finally {
+      setSharing(false);
+    }
   };
 
   return (
@@ -483,10 +573,18 @@ function ResultView({ result, onRefineIssue, onIgnoreIssue, refiningIssue, canUs
               <p className="eyebrow">результат</p>
               <h2 className="section-title">Переписанный текст</h2>
             </div>
-            <button className="icon-button" onClick={copy} title="Скопировать">
-              {copied ? <Check className="h-4 w-4" /> : <Clipboard className="h-4 w-4" />}
-            </button>
+            <div className="flex items-center gap-2">
+              {onShare && <button className="secondary-button h-10 px-3 text-xs" onClick={share}>{sharing ? "Создаём..." : "Поделиться"}</button>}
+              <button className="icon-button" onClick={copy} title="Скопировать">
+                {copied ? <Check className="h-4 w-4" /> : <Clipboard className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
+          {shareUrl && (
+            <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
+              Ссылка скопирована: <a className="underline" href={shareUrl} target="_blank" rel="noreferrer">{shareUrl}</a>
+            </div>
+          )}
           <HighlightedRewrite text={result.rewritten_text} issues={result.issues} />
         </div>
       </div>
@@ -527,9 +625,9 @@ function ResultView({ result, onRefineIssue, onIgnoreIssue, refiningIssue, canUs
                         loading={refiningIssue === issueKey(issue)}
                         onClick={() => onRefineIssue?.(issue)}
                       />
-                    ) : (
+                    ) : aiUnavailableReason ? (
                       <p className="text-xs text-slate-500 dark:text-slate-400">{aiUnavailableReason}</p>
-                    )}
+                    ) : null}
                     <IgnoreIssueButton onClick={() => onIgnoreIssue?.(issue)} />
                   </div>
                 </article>
@@ -600,6 +698,7 @@ function HomePage({ me, refreshMe }) {
   const [selectedTerm, setSelectedTerm] = useState("");
   const [refiningIssue, setRefiningIssue] = useState("");
   const [stateRestored, setStateRestored] = useState(false);
+  const [batchShareUrl, setBatchShareUrl] = useState("");
 
   const excludedTerms = useMemo(() => parseExcludedTerms(excludedTermsText), [excludedTermsText]);
   const filteredResults = useMemo(
@@ -613,6 +712,22 @@ function HomePage({ me, refreshMe }) {
   const totalPages = Math.max(1, Math.ceil(sortedResults.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const visibleResults = sortedResults.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const pageNumbers = pageWindow(currentPage, totalPages);
+  const selectedTermDetails = useMemo(() => {
+    if (!selectedTerm) return null;
+    for (const item of batchResults) {
+      const issue = item.issues.find((candidate) => (candidate.normalized || candidate.term.toLowerCase()) === selectedTerm);
+      if (issue) {
+        return {
+          term: issue.term,
+          normalized: issue.normalized || selectedTerm,
+          risk: issue.risk,
+          adsCount: filteredResults.length,
+        };
+      }
+    }
+    return null;
+  }, [batchResults, filteredResults.length, selectedTerm]);
   const currentUser = me?.authenticated ? me.user : null;
   const rowsRemaining = currentUser?.rows_remaining;
   const aiRemaining = currentUser?.ai_remaining;
@@ -853,6 +968,7 @@ function HomePage({ me, refreshMe }) {
     setQuotaExceeded(false);
     setProgress(0);
     setBatchResults([]);
+    setBatchShareUrl("");
     setSelectedTerm("");
     setExpandedResults(new Set());
     setPage(1);
@@ -904,6 +1020,22 @@ function HomePage({ me, refreshMe }) {
 
   const exportXlsx = () => {
     exportResultsXlsx(batchResults, batchRows);
+  };
+
+  const exportUpdatedXlsx = () => {
+    exportUpdatedSourceXlsx(batchResults, batchRows);
+  };
+
+  const shareSingleReport = async () => {
+    if (!result) return "";
+    return createShareReport("single", { result });
+  };
+
+  const shareBatchReport = async () => {
+    const url = await createShareReport("batch", { results: batchResults });
+    setBatchShareUrl(url);
+    await navigator.clipboard.writeText(url);
+    return url;
   };
 
   const toggleResult = (requestId) => {
@@ -959,7 +1091,7 @@ function HomePage({ me, refreshMe }) {
           </section>
           {quotaExceeded && <QuotaExceededBanner />}
           {error && <div className="error-box">{error}</div>}
-          <ResultView result={result} onRefineIssue={refineSingleIssue} onIgnoreIssue={ignoreSingleIssue} refiningIssue={refiningIssue} canUseAi={canUseAi} aiUnavailableReason={aiUnavailableReason} />
+          <ResultView result={result} onRefineIssue={refineSingleIssue} onIgnoreIssue={ignoreSingleIssue} refiningIssue={refiningIssue} canUseAi={canUseAi} aiUnavailableReason={aiUnavailableReason} onShare={shareSingleReport} />
           <UpgradeAfterCheckBanner user={currentUser} result={result} />
         </>
       ) : (
@@ -1007,15 +1139,37 @@ function HomePage({ me, refreshMe }) {
             onSelectTerm={(term) => { setSelectedTerm(term); setPage(1); }}
             onDownloadXlsx={exportXlsx}
             onDownloadCsv={exportCsv}
+            onDownloadUpdatedXlsx={exportUpdatedXlsx}
+            onShare={shareBatchReport}
             onRefineTerm={refineBatchTerm}
             onIgnoreTerm={ignoreBatchTerm}
             refiningTerm={refiningIssue}
             canUseAi={canUseAi}
             aiUnavailableReason={aiUnavailableReason}
           />
+          {batchShareUrl && (
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
+              Ссылка на отчёт скопирована: <a className="underline" href={batchShareUrl} target="_blank" rel="noreferrer">{batchShareUrl}</a>
+            </div>
+          )}
 
           {batchResults.length > 0 && (
             <div className="panel">
+              {selectedTermDetails && (
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#c8e6a0] bg-[#f5faf0] px-4 py-3 text-sm dark:border-[#3d6020] dark:bg-[#1a2810]">
+                  <div className="flex flex-wrap items-center gap-2 text-[#2d5010] dark:text-[#a8d870]">
+                    <span className="font-semibold">Фильтр по слову:</span>
+                    <span className="font-mono font-semibold">{selectedTermDetails.term}</span>
+                    <RiskBadge risk={selectedTermDetails.risk} />
+                    <span className="text-[#4a7c10] dark:text-[#7eb850]">
+                      найдено в {selectedTermDetails.adsCount} объявлениях
+                    </span>
+                  </div>
+                  <button className="secondary-button" onClick={() => { setSelectedTerm(""); setPage(1); }}>
+                    Показать все
+                  </button>
+                </div>
+              )}
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="text-sm text-slate-600 dark:text-slate-300">Показано {visibleResults.length} из {sortedResults.length}. Страница {currentPage} из {totalPages}.</div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -1026,6 +1180,17 @@ function HomePage({ me, refreshMe }) {
                   </select>
                   <button className="secondary-button" onClick={() => setSortDesc((value) => !value)}>Сортировать по риску</button>
                   <button className="secondary-button" disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Назад</button>
+                  {pageNumbers.map((pageNumber, index) => (
+                    <span key={pageNumber} className="flex items-center gap-2">
+                      {index > 0 && pageNumber - pageNumbers[index - 1] > 1 && <span className="text-sm text-slate-400">...</span>}
+                      <button
+                        className={pageNumber === currentPage ? "primary-button h-10 px-3" : "secondary-button h-10 px-3"}
+                        onClick={() => setPage(pageNumber)}
+                      >
+                        {pageNumber}
+                      </button>
+                    </span>
+                  ))}
                   <button className="secondary-button" disabled={currentPage >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Вперед</button>
                 </div>
               </div>
@@ -1070,11 +1235,7 @@ function HomePage({ me, refreshMe }) {
                                         Вывод ИИ: {localizeSystemText(issue.ai_summary)}
                                       </p>
                                     )}
-                                    {issue.sources?.length > 0 && (
-                                      <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                                        Источники: {issue.sources.join("; ")}
-                                      </p>
-                                    )}
+                                    <IssueSources sources={issue.sources} />
                                   </div>
                                 ))}
                               </div>
@@ -1187,6 +1348,7 @@ export default function App() {
             <Route path="/register" element={<Register onRegister={register} />} />
             <Route path="/pricing" element={<Pricing user={user} />} />
             <Route path="/terms" element={<Terms />} />
+            <Route path="/share/:shareId" element={<SharedReportPage />} />
             <Route path="/admin" element={<Admin user={user} />} />
             <Route path="/admin/allowlist" element={<AllowlistAdmin user={user} />} />
           </Routes>
