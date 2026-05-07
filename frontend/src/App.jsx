@@ -359,10 +359,21 @@ function IgnoreIssueButton({ onClick }) {
 }
 
 function ReplacementChips({ replacements = [], issue, selectedReplacement = "", onSelect }) {
-  if (!replacements.length) return null;
+  const [customReplacement, setCustomReplacement] = useState("");
+  if (!replacements.length && !onSelect) return null;
+  const visibleReplacements = selectedReplacement && !replacements.includes(selectedReplacement)
+    ? [selectedReplacement, ...replacements]
+    : replacements;
+  const submitCustomReplacement = (event) => {
+    event.preventDefault();
+    const value = customReplacement.trim();
+    if (!value || !onSelect) return;
+    onSelect(issue, value);
+    setCustomReplacement("");
+  };
   return (
-    <div className="mb-2 mt-1.5 flex flex-wrap gap-1.5">
-      {replacements.map((replacement) => (
+    <div className="mb-2 mt-1.5 flex flex-wrap items-center gap-1.5">
+      {visibleReplacements.map((replacement) => (
         <button
           key={replacement}
           type="button"
@@ -383,6 +394,23 @@ function ReplacementChips({ replacements = [], issue, selectedReplacement = "", 
           {replacement}
         </button>
       ))}
+      {onSelect && (
+        <form onSubmit={submitCustomReplacement} className="flex items-center gap-1">
+          <input
+            value={customReplacement}
+            onChange={(event) => setCustomReplacement(event.target.value)}
+            placeholder="свой вариант"
+            className="h-7 w-32 rounded-full border border-[#e0e0da] bg-white px-3 text-xs text-[#1a1a18] outline-none transition placeholder:text-slate-400 focus:border-[#4a7c10] dark:border-[#38505c] dark:bg-[#182630] dark:text-[#f4f7f2]"
+          />
+          <button
+            type="submit"
+            disabled={!customReplacement.trim()}
+            className="h-7 rounded-full border border-[#4a7c10] px-2.5 text-xs font-semibold text-[#4a7c10] transition hover:bg-[#eef5e6] disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#7ed59a] dark:text-[#a8d870] dark:hover:bg-[#1a2e12]"
+          >
+            ОК
+          </button>
+        </form>
+      )}
     </div>
   );
 }
@@ -960,8 +988,17 @@ function HomePage({ me, refreshMe }) {
         const cleanIssue = { ...issue };
         delete cleanIssue.__replacementOnly;
         delete cleanIssue.__selectedReplacement;
+        const key = issueSoftKey(cleanIssue);
+        const issues = current.issues.map((item) => {
+          if (issueSoftKey(item) !== key) return item;
+          return {
+            ...item,
+            replacements: [replacement, ...(item.replacements || []).filter((value) => value !== replacement)]
+          };
+        });
         return {
           ...current,
+          issues,
           rewritten_text: replaceIssueInText(current.rewritten_text, cleanIssue, replacement)
         };
       });

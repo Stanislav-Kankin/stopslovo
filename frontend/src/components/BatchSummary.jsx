@@ -225,6 +225,7 @@ export function BatchSummary({
   const terms = aggregateByTerm(results, sourceRows);
   const adsWithIssues = results.filter((item) => item.issues.length > 0).length;
   const [shareFlash, setShareFlash] = useState(false);
+  const [customReplacements, setCustomReplacements] = useState({});
 
   useEffect(() => {
     if (!shareUrl) return undefined;
@@ -301,7 +302,21 @@ export function BatchSummary({
         {terms.map((term) => {
           const selected = selectedTerm === term.normalized;
           const termKey = `${term.normalized || term.term.toLowerCase()}|${term.category || ""}`;
+          const replacementKey = String(term.normalized || term.term || "").toLowerCase();
+          const selectedReplacement = replacementChoices[replacementKey] || "";
+          const visibleReplacements = selectedReplacement && !term.replacements.includes(selectedReplacement)
+            ? [selectedReplacement, ...term.replacements]
+            : term.replacements;
+          const customReplacement = customReplacements[replacementKey] || "";
           const isRefining = refiningTerm === term.normalized || refiningTerm === termKey;
+          const submitCustomReplacement = (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const value = customReplacement.trim();
+            if (!value || !onSelectReplacement) return;
+            onSelectReplacement(term, value);
+            setCustomReplacements((current) => ({ ...current, [replacementKey]: "" }));
+          };
 
           return (
             <div
@@ -324,10 +339,10 @@ export function BatchSummary({
                 </span>
               </div>
 
-              {term.replacements.length > 0 && (
+              {(visibleReplacements.length > 0 || onSelectReplacement) && (
                 <div className="mb-2 flex flex-wrap items-center gap-1.5">
                   <span className="text-xs text-slate-500 dark:text-slate-400">Замены:</span>
-                  {term.replacements.map((replacement) => (
+                  {visibleReplacements.map((replacement) => (
                     <button
                       key={replacement}
                       type="button"
@@ -341,7 +356,7 @@ export function BatchSummary({
                       }}
                       title={onSelectReplacement ? "Использовать эту замену в файле для загрузки" : "Скопировать"}
                       className={`rounded-full border px-2.5 py-0.5 text-xs transition ${
-                        replacementChoices[String(term.normalized || term.term || "").toLowerCase()] === replacement
+                        selectedReplacement === replacement
                           ? "border-[#4a7c10] bg-[#eef5e6] font-semibold text-[#3d6b10] dark:border-[#7ed59a] dark:bg-[#1a2e12] dark:text-[#a8d870]"
                           : "border-[#e0e0da] bg-[#f7f7f3] text-[#1a1a18] hover:border-[#4a7c10] hover:text-[#4a7c10] dark:border-[#38505c] dark:bg-[#182630] dark:text-[#f4f7f2] dark:hover:border-[#7ed59a] dark:hover:text-[#7ed59a]"
                       }`}
@@ -350,8 +365,25 @@ export function BatchSummary({
                     </button>
                   ))}
                   {onSelectReplacement && (
+                    <form onSubmit={submitCustomReplacement} onClick={(event) => event.stopPropagation()} className="flex items-center gap-1">
+                      <input
+                        value={customReplacement}
+                        onChange={(event) => setCustomReplacements((current) => ({ ...current, [replacementKey]: event.target.value }))}
+                        placeholder="свой вариант"
+                        className="h-7 w-32 rounded-full border border-[#e0e0da] bg-white px-3 text-xs text-[#1a1a18] outline-none transition placeholder:text-slate-400 focus:border-[#4a7c10] dark:border-[#38505c] dark:bg-[#182630] dark:text-[#f4f7f2]"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!customReplacement.trim()}
+                        className="h-7 rounded-full border border-[#4a7c10] px-2.5 text-xs font-semibold text-[#4a7c10] transition hover:bg-[#eef5e6] disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#7ed59a] dark:text-[#a8d870] dark:hover:bg-[#1a2e12]"
+                      >
+                        ОК
+                      </button>
+                    </form>
+                  )}
+                  {onSelectReplacement && (
                     <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                      {replacementChoices[String(term.normalized || term.term || "").toLowerCase()]
+                      {selectedReplacement
                         ? "выбрана для экспорта"
                         : "по умолчанию будет первая"}
                     </span>
