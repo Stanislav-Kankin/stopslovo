@@ -23,6 +23,21 @@ const riskBorderLeft = {
 };
 
 const riskWeight = { high: 4, medium: 3, low: 2, safe: 1 };
+const SOURCE_ID_COLUMNS = [
+  "ID объявления",
+  "№ объявления",
+  "ID объявления (серверный)",
+  "ID объявления (локальный)",
+  "ID кампании",
+  "ID кампании (серверный)",
+  "ID кампании (локальный)",
+  "ID группы",
+  "id объявления",
+  "id кампании",
+  "id группы",
+  "ID",
+  "id"
+];
 
 function RiskBadge({ risk }) {
   return (
@@ -92,8 +107,44 @@ function uniqueIssues(issues = []) {
   return [...map.values()];
 }
 
-export function aggregateByTerm(results) {
+function sourceValue(source = {}, variants = []) {
+  const entries = Object.entries(source || {});
+  for (const variant of variants) {
+    const found = entries.find(([key]) => String(key).trim().toLowerCase() === String(variant).trim().toLowerCase());
+    if (found && String(found[1] ?? "").trim()) return String(found[1]).trim();
+  }
+  return "";
+}
+
+function sourceRowsByRequestId(sourceRows = []) {
+  return new Map(sourceRows.map((row) => [row.request_id, row]));
+}
+
+function displayId(row, sourceLookup = new Map()) {
+  const requestId = String(row?.request_id || "");
+  if (requestId && !/^row-\d+$/i.test(requestId)) return requestId;
+  const sourceRow = sourceLookup.get(requestId);
+  return sourceValue(sourceRow?.source, SOURCE_ID_COLUMNS) || requestId;
+}
+
+function MethodologyBanner() {
+  return (
+    <div className="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm dark:border-[#3d6880] dark:bg-[#1e3442]">
+      <p className="mb-1 font-semibold text-[#17445b] dark:text-[#d6eef8]">Источники и методика проверки</p>
+      <p className="leading-relaxed text-slate-700 dark:text-[#d6eef8]">
+        Сводка строится по словарю риска СтопСлово, подключённым нормативным словарям, белому списку и результатам ИИ-уточнений.
+        Источники по каждому слову можно раскрыть в карточке через кнопку «Методика проверки».
+      </p>
+      <p className="mt-1 text-xs text-slate-500 dark:text-[#b9d9e6]">
+        Это автоматическая оценка риска, не юридическое заключение.
+      </p>
+    </div>
+  );
+}
+
+export function aggregateByTerm(results, sourceRows = []) {
   const map = {};
+  const sourceLookup = sourceRowsByRequestId(sourceRows);
   for (const result of results) {
     for (const issue of uniqueIssues(result.issues)) {
       const key = issue.normalized || issue.term.toLowerCase();
@@ -113,7 +164,10 @@ export function aggregateByTerm(results) {
         };
       }
       map[key].count += 1;
-      map[key].ads.push(result.request_id);
+      const id = displayId(result, sourceLookup);
+      if (id && !map[key].ads.includes(id)) {
+        map[key].ads.push(id);
+      }
       for (const source of issue.sources || []) {
         if (!map[key].sources.includes(source)) {
           map[key].sources.push(source);
@@ -147,6 +201,7 @@ export function BatchSummary({
   onDownloadUpdatedCsv,
   onShare,
   replacementChoices = {},
+  sourceRows = [],
   onSelectReplacement,
   onRefineTerm,
   onIgnoreTerm,
@@ -154,7 +209,7 @@ export function BatchSummary({
   canUseAi,
   aiUnavailableReason
 }) {
-  const terms = aggregateByTerm(results);
+  const terms = aggregateByTerm(results, sourceRows);
   const adsWithIssues = results.filter((item) => item.issues.length > 0).length;
 
   if (!results.length) return null;
@@ -205,6 +260,8 @@ export function BatchSummary({
           </div>
         </div>
       </div>
+
+      <MethodologyBanner />
 
       <div className="flex flex-col gap-2">
         {terms.map((term) => {

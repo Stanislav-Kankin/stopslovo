@@ -118,6 +118,21 @@ const riskClass = {
 };
 
 const riskWeight = { high: 4, medium: 3, low: 2, safe: 1 };
+const SOURCE_ID_COLUMNS = [
+  "ID объявления",
+  "№ объявления",
+  "ID объявления (серверный)",
+  "ID объявления (локальный)",
+  "ID кампании",
+  "ID кампании (серверный)",
+  "ID кампании (локальный)",
+  "ID группы",
+  "id объявления",
+  "id кампании",
+  "id группы",
+  "ID",
+  "id"
+];
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -213,6 +228,22 @@ function uniqueIssues(issues = []) {
     }
   }
   return [...map.values()];
+}
+
+function sourceValue(source = {}, variants = []) {
+  const entries = Object.entries(source || {});
+  for (const variant of variants) {
+    const found = entries.find(([key]) => String(key).trim().toLowerCase() === String(variant).trim().toLowerCase());
+    if (found && String(found[1] ?? "").trim()) return String(found[1]).trim();
+  }
+  return "";
+}
+
+function displayBatchId(row, sourceLookup = new Map()) {
+  const requestId = String(row?.request_id || "");
+  if (requestId && !/^row-\d+$/i.test(requestId)) return requestId;
+  const sourceRow = sourceLookup.get(requestId);
+  return sourceValue(sourceRow?.source, SOURCE_ID_COLUMNS) || requestId;
 }
 
 function issueKey(issue) {
@@ -383,17 +414,17 @@ function StatCell({ num, label, color }) {
 
 function MethodologyCard({ compact = false }) {
   return (
-    <div className={compact ? "rounded-xl border border-[#e0e0da] bg-[#f7f7f3] px-4 py-3 text-sm dark:border-[#38505c] dark:bg-[#182630]" : "panel"}>
+    <div className={compact ? "rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm dark:border-[#3d6880] dark:bg-[#1e3442]" : "panel"}>
       <p className="eyebrow">источники</p>
       <h2 className={compact ? "mb-1 text-base font-semibold text-[#1a1a18] dark:text-[#f4f7f2]" : "section-title"}>
         Откуда берутся данные
       </h2>
-      <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+      <p className="text-sm leading-relaxed text-slate-700 dark:text-[#d6eef8]">
         Проверка сопоставляет текст со словарём риска СтопСлово, подключёнными нормативными словарями,
         общим и пользовательским белым списком. Спорные слова можно уточнить через ИИ, а источники по
         каждому слову раскрываются в карточке замечания.
       </p>
-      <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+      <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-[#b9d9e6]">
         Это автоматическая оценка риска, не юридическое заключение. Для спорных случаев нужна ручная проверка.
       </p>
     </div>
@@ -755,6 +786,7 @@ function HomePage({ me, refreshMe }) {
   const currentPage = Math.min(page, totalPages);
   const visibleResults = sortedResults.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const pageNumbers = pageWindow(currentPage, totalPages);
+  const batchSourceLookup = useMemo(() => new Map(batchRows.map((row) => [row.request_id, row])), [batchRows]);
   const selectedTermDetails = useMemo(() => {
     if (!selectedTerm) return null;
     for (const item of batchResults) {
@@ -1190,7 +1222,7 @@ function HomePage({ me, refreshMe }) {
                 <div className="divide-y divide-slate-200 dark:divide-slate-800">
                   {batchRows.slice(0, 3).map((row) => (
                     <div key={row.request_id} className="grid gap-1 px-3 py-2 text-sm md:grid-cols-[120px_1fr]">
-                      <span className="font-medium text-slate-500 dark:text-slate-400">{row.request_id}</span>
+                      <span className="font-medium text-slate-500 dark:text-slate-400">{displayBatchId(row, batchSourceLookup)}</span>
                       <span className="line-clamp-2 text-slate-800 dark:text-slate-100">{row.text}</span>
                     </div>
                   ))}
@@ -1222,6 +1254,7 @@ function HomePage({ me, refreshMe }) {
             refiningTerm={refiningIssue}
             canUseAi={canUseAi}
             aiUnavailableReason={aiUnavailableReason}
+            sourceRows={batchRows}
           />
           {batchShareUrl && (
             <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
@@ -1278,11 +1311,12 @@ function HomePage({ me, refreshMe }) {
               <div className="grid gap-3">
                 {visibleResults.map((item) => {
                   const expanded = expandedResults.has(item.request_id);
+                  const displayId = displayBatchId(item, batchSourceLookup);
                   return (
                     <article key={item.request_id} className="cursor-pointer rounded-[10px] border border-[#e0e0da] bg-white transition hover:border-[#c8c8c0] dark:border-[#38505c] dark:bg-[#22313b] dark:hover:border-[#5d7b89]" onClick={() => toggleResult(item.request_id)}>
                       <div className="p-4">
                         <div className="flex flex-wrap items-center gap-3">
-                          <strong className="font-mono text-sm text-[#1a1a18] dark:text-[#f4f7f2]">{item.request_id}</strong>
+                          <strong className="font-mono text-sm text-[#1a1a18] dark:text-[#f4f7f2]">{displayId}</strong>
                           <RiskBadge risk={item.overall_risk} />
                           <span className="rounded-full border border-[#e0e0da] px-2.5 py-1 text-xs font-semibold text-[#7a7a70] dark:border-[#496574] dark:text-[#c1d0cc]">{uniqueIssues(item.issues).length} замечаний</span>
                           <span className="ml-auto text-lg text-[#7a7a70] dark:text-[#c1d0cc]">{expanded ? "▲" : "▼"}</span>
