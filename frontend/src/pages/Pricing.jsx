@@ -138,9 +138,9 @@ export function Pricing({ user }) {
           return (
             <article key={plan.id} className={cardClass}>
               {plan.badge && <span className="absolute right-4 top-4 rounded-full bg-[#4a7c10] px-2 py-0.5 text-xs text-white">{plan.badge}</span>}
-              <div className={plan.badge ? "pr-24" : ""}>
-                <h2 className="text-xl font-semibold">{plan.name}</h2>
-                <p className="mt-2 text-2xl font-bold text-[#4a7c10] dark:text-[#7ed59a]">{plan.price}</p>
+              <div>
+                <h2 className={`text-xl font-semibold ${plan.badge ? "pr-24" : ""}`}>{plan.name}</h2>
+                <p className="mt-2 whitespace-nowrap text-2xl font-bold text-[#4a7c10] dark:text-[#7ed59a]">{plan.price}</p>
                 <p className="text-sm text-slate-500 dark:text-slate-400">{plan.period}</p>
               </div>
               <ul className="my-5 grid gap-2 text-sm text-slate-700 dark:text-slate-200">
