@@ -61,13 +61,19 @@ function sourceValue(source = {}, variants = []) {
 }
 
 function displayId(row, sourceLookup = new Map()) {
+  if (row?.display_id) return String(row.display_id);
   const requestId = String(row?.request_id || "");
   if (requestId && !/^row-\d+$/i.test(requestId)) return requestId;
   const sourceRow = sourceLookup.get(requestId);
   return sourceValue(sourceRow?.source, SOURCE_ID_COLUMNS) || requestId;
 }
 
-export function toCsv(rows, sourceRows = []) {
+function issueAiText(issue) {
+  if (!issue?.ai_refined && !issue?.ai_summary) return "";
+  return `, ИИ: ${issue.ai_summary || "уточнено"}`;
+}
+
+export function toCsv(rows, sourceRows = [], delimiter = "\t", includeSeparatorHint = false) {
   const sourceLookup = new Map(sourceRows.map((row) => [row.request_id, row]));
   const riskLabels = {
     high: "высокий",
@@ -95,10 +101,14 @@ export function toCsv(rows, sourceRows = []) {
     }
     return [...map.values()];
   };
-  const escape = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
-  const delimiter = ";";
+  const escape = (value) => {
+    const text = String(value ?? "");
+    return text.includes('"') || text.includes("\n") || text.includes("\r") || text.includes(delimiter)
+      ? `"${text.replaceAll('"', '""')}"`
+      : text;
+  };
   return [
-    "\uFEFFsep=;",
+    ...(includeSeparatorHint ? [`sep=${delimiter}`] : []),
     header.join(delimiter),
     ...rows.map((row) =>
       [
@@ -108,7 +118,7 @@ export function toCsv(rows, sourceRows = []) {
         uniqueIssues(row.issues)
           .map((issue) => {
             const sources = issue.sources?.length ? `, источники: ${issue.sources.join("; ")}` : "";
-            return `${issue.term}: ${riskLabels[issue.risk] || issue.risk}${sources}`;
+            return `${issue.term}: ${riskLabels[issue.risk] || issue.risk}${sources}${issueAiText(issue)}`;
           })
           .join("; "),
         row.rewritten_text,
@@ -134,5 +144,5 @@ function encodeUtf16LeWithBom(text) {
 }
 
 export function toExcelCsvBlob(rows, sourceRows = []) {
-  return new Blob([encodeUtf16LeWithBom(toCsv(rows, sourceRows))], { type: "text/csv;charset=utf-16le" });
+  return new Blob([encodeUtf16LeWithBom(toCsv(rows, sourceRows, "\t", false))], { type: "text/csv;charset=utf-16le" });
 }

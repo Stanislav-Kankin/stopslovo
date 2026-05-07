@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Download, FileSpreadsheet, Share2 } from "lucide-react";
 
 const riskLabels = {
@@ -121,6 +121,7 @@ function sourceRowsByRequestId(sourceRows = []) {
 }
 
 function displayId(row, sourceLookup = new Map()) {
+  if (row?.display_id) return String(row.display_id);
   const requestId = String(row?.request_id || "");
   if (requestId && !/^row-\d+$/i.test(requestId)) return requestId;
   const sourceRow = sourceLookup.get(requestId);
@@ -132,7 +133,11 @@ function MethodologyBanner() {
     <div className="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm dark:border-[#3d6880] dark:bg-[#1e3442]">
       <p className="mb-1 font-semibold text-[#17445b] dark:text-[#d6eef8]">Источники и методика проверки</p>
       <p className="leading-relaxed text-slate-700 dark:text-[#d6eef8]">
-        Сводка строится по словарю риска СтопСлово, подключённым нормативным словарям, белому списку и результатам ИИ-уточнений.
+        На первом уровне используются официальные словари: орфографический и орфоэпический словари РАН,
+        словарь иностранных слов РАН и толковый словарь государственного языка. Затем применяются словарь
+        риска СтопСлово, белый список и результаты ИИ-уточнений.
+      </p>
+      <p className="mt-1 leading-relaxed text-slate-700 dark:text-[#d6eef8]">
         Источники по каждому слову можно раскрыть в карточке через кнопку «Методика проверки».
       </p>
       <p className="mt-1 text-xs text-slate-500 dark:text-[#b9d9e6]">
@@ -200,6 +205,8 @@ export function BatchSummary({
   onDownloadUpdatedXlsx,
   onDownloadUpdatedCsv,
   onShare,
+  shareUrl = "",
+  shareError = "",
   replacementChoices = {},
   sourceRows = [],
   onSelectReplacement,
@@ -211,6 +218,14 @@ export function BatchSummary({
 }) {
   const terms = aggregateByTerm(results, sourceRows);
   const adsWithIssues = results.filter((item) => item.issues.length > 0).length;
+  const [shareFlash, setShareFlash] = useState(false);
+
+  useEffect(() => {
+    if (!shareUrl) return undefined;
+    setShareFlash(true);
+    const timer = window.setTimeout(() => setShareFlash(false), 1400);
+    return () => window.clearTimeout(timer);
+  }, [shareUrl]);
 
   if (!results.length) return null;
 
@@ -224,9 +239,22 @@ export function BatchSummary({
         </div>
         <div className="flex flex-wrap items-stretch gap-2">
           {onShare && (
-            <button className="secondary-button" onClick={onShare}>
-              <Share2 className="h-4 w-4" /> Поделиться
-            </button>
+            <div className="flex min-w-[240px] flex-col gap-1">
+              <button className={`secondary-button ${shareFlash ? "animate-pulse border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100" : ""}`} onClick={onShare}>
+                <Share2 className="h-4 w-4" /> {shareUrl ? "Ссылка готова" : "Поделиться"}
+              </button>
+              {shareUrl && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
+                  <span className="font-semibold">Отчёт:</span>{" "}
+                  <a className="underline" href={shareUrl} target="_blank" rel="noreferrer">{shareUrl}</a>
+                </div>
+              )}
+              {shareError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100">
+                  Не удалось создать ссылку: {shareError}
+                </div>
+              )}
+            </div>
           )}
           <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#c8e6a0] bg-[#f5faf0] p-1.5 dark:border-[#3d6020] dark:bg-[#1a2810]">
             <span className="px-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#4a7c10] dark:text-[#a8d870]">

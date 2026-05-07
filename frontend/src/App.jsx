@@ -240,6 +240,7 @@ function sourceValue(source = {}, variants = []) {
 }
 
 function displayBatchId(row, sourceLookup = new Map()) {
+  if (row?.display_id) return String(row.display_id);
   const requestId = String(row?.request_id || "");
   if (requestId && !/^row-\d+$/i.test(requestId)) return requestId;
   const sourceRow = sourceLookup.get(requestId);
@@ -420,9 +421,12 @@ function MethodologyCard({ compact = false }) {
         Откуда берутся данные
       </h2>
       <p className="text-sm leading-relaxed text-slate-700 dark:text-[#d6eef8]">
-        Проверка сопоставляет текст со словарём риска СтопСлово, подключёнными нормативными словарями,
-        общим и пользовательским белым списком. Спорные слова можно уточнить через ИИ, а источники по
-        каждому слову раскрываются в карточке замечания.
+        В основе проверки — официальные словари: орфографический и орфоэпический словари РАН,
+        словарь иностранных слов РАН и толковый словарь государственного языка. Поверх них используются
+        словарь риска СтопСлово, общий и пользовательский белые списки.
+      </p>
+      <p className="mt-2 text-sm leading-relaxed text-slate-700 dark:text-[#d6eef8]">
+        Спорные слова можно уточнить через ИИ, а источники по каждому слову раскрываются в карточке замечания.
       </p>
       <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-[#b9d9e6]">
         Это автоматическая оценка риска, не юридическое заключение. Для спорных случаев нужна ручная проверка.
@@ -1132,7 +1136,11 @@ function HomePage({ me, refreshMe }) {
     setBatchShareError("");
     setBatchShareUrl("");
     try {
-      const url = await createShareReport("batch", { results: batchResults });
+      const resultsForShare = batchResults.map((row) => ({
+        ...row,
+        display_id: displayBatchId(row, batchSourceLookup)
+      }));
+      const url = await createShareReport("batch", { results: resultsForShare });
       setBatchShareUrl(url);
       await copyTextBestEffort(url);
       return url;
@@ -1221,8 +1229,8 @@ function HomePage({ me, refreshMe }) {
                 <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-600 dark:border-[#38505c] dark:bg-[#1b2a34] dark:text-[#c7d5d1]">Предпросмотр импорта</div>
                 <div className="divide-y divide-slate-200 dark:divide-slate-800">
                   {batchRows.slice(0, 3).map((row) => (
-                    <div key={row.request_id} className="grid gap-1 px-3 py-2 text-sm md:grid-cols-[120px_1fr]">
-                      <span className="font-medium text-slate-500 dark:text-slate-400">{displayBatchId(row, batchSourceLookup)}</span>
+                    <div key={row.request_id} className="grid gap-1 px-3 py-2 text-sm md:grid-cols-[220px_1fr]">
+                      <span className="font-medium text-slate-500 dark:text-slate-400">ID объявления: {displayBatchId(row, batchSourceLookup)}</span>
                       <span className="line-clamp-2 text-slate-800 dark:text-slate-100">{row.text}</span>
                     </div>
                   ))}
@@ -1255,17 +1263,9 @@ function HomePage({ me, refreshMe }) {
             canUseAi={canUseAi}
             aiUnavailableReason={aiUnavailableReason}
             sourceRows={batchRows}
+            shareUrl={batchShareUrl}
+            shareError={batchShareError}
           />
-          {batchShareUrl && (
-            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
-              Ссылка на отчёт скопирована: <a className="underline" href={batchShareUrl} target="_blank" rel="noreferrer">{batchShareUrl}</a>
-            </div>
-          )}
-          {batchShareError && (
-            <div className="error-box">
-              Не удалось создать публичную ссылку: {batchShareError}
-            </div>
-          )}
 
           {batchResults.length > 0 && (
             <div className="panel">
@@ -1316,7 +1316,7 @@ function HomePage({ me, refreshMe }) {
                     <article key={item.request_id} className="cursor-pointer rounded-[10px] border border-[#e0e0da] bg-white transition hover:border-[#c8c8c0] dark:border-[#38505c] dark:bg-[#22313b] dark:hover:border-[#5d7b89]" onClick={() => toggleResult(item.request_id)}>
                       <div className="p-4">
                         <div className="flex flex-wrap items-center gap-3">
-                          <strong className="font-mono text-sm text-[#1a1a18] dark:text-[#f4f7f2]">{displayId}</strong>
+                          <strong className="font-mono text-sm text-[#1a1a18] dark:text-[#f4f7f2]">ID объявления: {displayId}</strong>
                           <RiskBadge risk={item.overall_risk} />
                           <span className="rounded-full border border-[#e0e0da] px-2.5 py-1 text-xs font-semibold text-[#7a7a70] dark:border-[#496574] dark:text-[#c1d0cc]">{uniqueIssues(item.issues).length} замечаний</span>
                           <span className="ml-auto text-lg text-[#7a7a70] dark:text-[#c1d0cc]">{expanded ? "▲" : "▼"}</span>

@@ -58,7 +58,8 @@ function issueDetails(issues) {
     .map((issue) => {
       const replacements = issue.replacements?.length ? `; замены: ${issue.replacements.join(", ")}` : "";
       const sources = issue.sources?.length ? `; источники: ${issue.sources.join("; ")}` : "";
-      return `${issue.term} (${RISK_LABELS[issue.risk] || issue.risk}): ${issue.reason}${replacements}${sources}`;
+      const ai = issue.ai_refined || issue.ai_summary ? `; ИИ-комментарий: ${issue.ai_summary || "уточнено через ИИ"}` : "";
+      return `${issue.term} (${RISK_LABELS[issue.risk] || issue.risk}): ${issue.reason}${replacements}${sources}${ai}`;
     })
     .join("\n");
 }
@@ -94,6 +95,7 @@ function sourceRowsByRequestId(sourceRows = []) {
 }
 
 function displayId(row, sourceLookup = new Map()) {
+  if (row?.display_id) return String(row.display_id);
   const requestId = String(row?.request_id || "");
   if (requestId && !/^row-\d+$/i.test(requestId)) return requestId;
   const sourceRow = sourceLookup.get(requestId);
@@ -113,6 +115,7 @@ function aggregateByTerm(rows, sourceRows = []) {
           risk: issue.risk,
           replacements: issue.replacements || [],
           sources: issue.sources || [],
+          ai_comments: [],
           count: 0,
           ads: []
         };
@@ -126,6 +129,9 @@ function aggregateByTerm(rows, sourceRows = []) {
         if (!map[key].sources.includes(source)) {
           map[key].sources.push(source);
         }
+      }
+      if ((issue.ai_refined || issue.ai_summary) && issue.ai_summary && !map[key].ai_comments.includes(issue.ai_summary)) {
+        map[key].ai_comments.push(issue.ai_summary);
       }
       if (riskWeight[issue.risk] > riskWeight[map[key].risk]) {
         map[key].risk = issue.risk;
@@ -296,6 +302,7 @@ export function exportResultsXlsx(rows, sourceRows = [], filename = "стопс�
     "Количество": item.count,
     "Рекомендуемая замена": item.replacements[0] || "",
     "Источники": item.sources.join("; "),
+    "Комментарии ИИ": item.ai_comments.join("\n"),
     "ID объявлений": item.ads.join(", ")
   }));
 
@@ -314,7 +321,7 @@ export function exportResultsXlsx(rows, sourceRows = [], filename = "стопс�
 
   const workbook = XLSX.utils.book_new();
   const summarySheet = sheetFromRows(summaryData);
-  summarySheet["!cols"] = [{ wch: 24 }, { wch: 14 }, { wch: 12 }, { wch: 28 }, { wch: 70 }, { wch: 80 }];
+  summarySheet["!cols"] = [{ wch: 24 }, { wch: 14 }, { wch: 12 }, { wch: 28 }, { wch: 70 }, { wch: 80 }, { wch: 80 }];
   XLSX.utils.book_append_sheet(workbook, summarySheet, "Сводка по словам");
 
   const resultSheet = sheetFromRows(resultData);
