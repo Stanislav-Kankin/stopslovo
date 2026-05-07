@@ -161,6 +161,15 @@ async function createShareReport(kind, data) {
   return `${window.location.origin}${payload.url}`;
 }
 
+async function copyTextBestEffort(value) {
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function chunkItems(items, size) {
   const chunks = [];
   for (let index = 0; index < items.length; index += size) {
@@ -372,6 +381,25 @@ function StatCell({ num, label, color }) {
   );
 }
 
+function MethodologyCard({ compact = false }) {
+  return (
+    <div className={compact ? "rounded-xl border border-[#e0e0da] bg-[#f7f7f3] px-4 py-3 text-sm dark:border-[#38505c] dark:bg-[#182630]" : "panel"}>
+      <p className="eyebrow">источники</p>
+      <h2 className={compact ? "mb-1 text-base font-semibold text-[#1a1a18] dark:text-[#f4f7f2]" : "section-title"}>
+        Откуда берутся данные
+      </h2>
+      <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+        Проверка сопоставляет текст со словарём риска СтопСлово, подключёнными нормативными словарями,
+        общим и пользовательским белым списком. Спорные слова можно уточнить через ИИ, а источники по
+        каждому слову раскрываются в карточке замечания.
+      </p>
+      <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+        Это автоматическая оценка риска, не юридическое заключение. Для спорных случаев нужна ручная проверка.
+      </p>
+    </div>
+  );
+}
+
 function RiskIcon({ risk }) {
   const color = {
     high: "#e24b4a",
@@ -552,7 +580,7 @@ function ResultView({ result, onRefineIssue, onIgnoreIssue, refiningIssue, canUs
     try {
       const url = await onShare();
       setShareUrl(url);
-      await navigator.clipboard.writeText(url);
+      await copyTextBestEffort(url);
     } finally {
       setSharing(false);
     }
@@ -661,6 +689,8 @@ function ResultView({ result, onRefineIssue, onIgnoreIssue, refiningIssue, canUs
             </div>
           )}
         </div>
+
+        <MethodologyCard />
 
         <div className="panel">
           <p className="eyebrow">резюме</p>
@@ -952,7 +982,7 @@ function HomePage({ me, refreshMe }) {
       const normalizedRows = imported.rows.map((row, index) => ({
         ...row,
         context_type: DEFAULT_CONTEXT,
-        request_id: /^row-\d+$/.test(row.request_id) ? `row-${index + 1}` : row.request_id
+        request_id: String(row.request_id || `строка-${index + 1}`)
       }));
       setBatchRows(normalizedRows);
       setBatchImportSummary(imported.summary);
@@ -1056,7 +1086,7 @@ function HomePage({ me, refreshMe }) {
   const shareBatchReport = async () => {
     const url = await createShareReport("batch", { results: batchResults });
     setBatchShareUrl(url);
-    await navigator.clipboard.writeText(url);
+    await copyTextBestEffort(url);
     return url;
   };
 
@@ -1155,6 +1185,7 @@ function HomePage({ me, refreshMe }) {
 
           {quotaExceeded && <QuotaExceededBanner />}
           {error && <div className="error-box">{error}</div>}
+          {batchResults.length > 0 && <MethodologyCard compact />}
           <BatchSummary
             results={batchResults}
             selectedTerm={selectedTerm}

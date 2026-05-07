@@ -167,12 +167,42 @@ export function BatchSummary({
           <span className="mx-2 text-slate-400">·</span>
           Объявлений с замечаниями: {adsWithIssues} / {results.length}
         </div>
-        <div className="flex flex-wrap gap-2">
-          {onShare && <button className="secondary-button" onClick={onShare}><Share2 className="h-4 w-4" /> Поделиться отчётом</button>}
-          {onDownloadUpdatedXlsx && <button className="primary-button" onClick={onDownloadUpdatedXlsx}><FileSpreadsheet className="h-4 w-4" /> XLSX для загрузки</button>}
-          {onDownloadUpdatedCsv && <button className="secondary-button" onClick={onDownloadUpdatedCsv}><Download className="h-4 w-4" /> CSV для загрузки</button>}
-          {onDownloadXlsx && <button className="primary-button" onClick={onDownloadXlsx}><FileSpreadsheet className="h-4 w-4" /> Отчёт XLSX</button>}
-          {onDownloadCsv && <button className="secondary-button" onClick={onDownloadCsv}><Download className="h-4 w-4" /> Отчёт CSV</button>}
+        <div className="flex flex-wrap items-stretch gap-2">
+          {onShare && (
+            <button className="secondary-button" onClick={onShare}>
+              <Share2 className="h-4 w-4" /> Поделиться
+            </button>
+          )}
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#c8e6a0] bg-[#f5faf0] p-1.5 dark:border-[#3d6020] dark:bg-[#1a2810]">
+            <span className="px-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#4a7c10] dark:text-[#a8d870]">
+              для загрузки
+            </span>
+            {onDownloadUpdatedCsv && (
+              <button className="primary-button" onClick={onDownloadUpdatedCsv}>
+                <Download className="h-4 w-4" /> CSV
+              </button>
+            )}
+            {onDownloadUpdatedXlsx && (
+              <button className="secondary-button" onClick={onDownloadUpdatedXlsx}>
+                <FileSpreadsheet className="h-4 w-4" /> XLSX
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#e0e0da] bg-[#f7f7f3] p-1.5 dark:border-[#38505c] dark:bg-[#182630]">
+            <span className="px-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+              отчёт
+            </span>
+            {onDownloadXlsx && (
+              <button className="secondary-button" onClick={onDownloadXlsx}>
+                <FileSpreadsheet className="h-4 w-4" /> XLSX
+              </button>
+            )}
+            {onDownloadCsv && (
+              <button className="secondary-button" onClick={onDownloadCsv}>
+                <Download className="h-4 w-4" /> CSV
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

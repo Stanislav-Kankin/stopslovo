@@ -10,7 +10,25 @@ const CONTEXT_TYPES = new Set([
   "b2b_документ"
 ]);
 
-const ID_COLUMNS = ["id", "ид", "номер", "объявление", "ad id", "ad_id"];
+const ID_COLUMNS = [
+  "id объявления",
+  "№ объявления",
+  "id объявления (серверный)",
+  "id объявления (локальный)",
+  "номер объявления",
+  "id кампании",
+  "id кампании (серверный)",
+  "id кампании (локальный)",
+  "id группы",
+  "id",
+  "ид",
+  "номер",
+  "объявление",
+  "ad id",
+  "ad_id",
+  "campaign id",
+  "campaign_id"
+];
 const CONTEXT_COLUMNS = ["context_type", "контекст", "тип контента", "тип_контента"];
 const DIRECT_TEXT_PATTERNS = [
   /^заголовок\s*1$/i,
@@ -67,7 +85,11 @@ function isContext(value) {
 }
 
 function pickColumn(headers, variants) {
-  return headers.find((header) => variants.some((variant) => normalizeHeader(header) === normalizeHeader(variant)));
+  for (const variant of variants) {
+    const found = headers.find((header) => normalizeHeader(header) === normalizeHeader(variant));
+    if (found) return found;
+  }
+  return undefined;
 }
 
 function isTextColumn(header) {
@@ -137,10 +159,12 @@ function headerScore(row) {
   return textHits * 8 + Math.min(cells.length, 30) + skipHits;
 }
 
-function rowsFromSheet(sheet) {
-  const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false });
-  const table = splitSingleColumnRows(raw)
+function rowsFromTable(rawTable) {
+  const table = splitSingleColumnRows(rawTable)
     .map((row) => row.map(cleanCellPreserveLines));
+  if (table[0]?.[0]?.startsWith("\uFEFF")) {
+    table[0][0] = table[0][0].replace(/^\uFEFF/, "");
+  }
   const meaningfulTable = table.filter((row) => row.some((cell) => cleanCell(cell)));
   if (!meaningfulTable.length) return { rows: [], meta: { source_table: table } };
 
@@ -170,6 +194,11 @@ function rowsFromSheet(sheet) {
       source_unique_headers: uniqueHeaders
     }
   };
+}
+
+function rowsFromSheet(sheet) {
+  const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false });
+  return rowsFromTable(raw);
 }
 
 function normalizeRows(rawRows, meta = {}) {
@@ -251,8 +280,51 @@ function detectTextDelimiter(text) {
     .sort((a, b) => b.score - a.score)[0]?.delimiter || ";";
 }
 
-function parseCsvWorkbook(text) {
-  return XLSX.read(text, { type: "string", raw: false });
+function parseDelimitedText(text, delimiter) {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let inQuotes = false;
+  const normalizedText = text.replace(/^\uFEFF/, "");
+
+  for (let index = 0; index < normalizedText.length; index += 1) {
+    const char = normalizedText[index];
+    const next = normalizedText[index + 1];
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        cell += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (!inQuotes && char === delimiter) {
+      row.push(cell);
+      cell = "";
+      continue;
+    }
+
+    if (!inQuotes && (char === "\n" || char === "\r")) {
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+      if (char === "\r" && next === "\n") index += 1;
+      continue;
+    }
+
+    cell += char;
+  }
+
+  if (cell || row.length || normalizedText.endsWith(delimiter)) {
+    row.push(cell);
+    rows.push(row);
+  }
+
+  return rows;
 }
 
 function parseBinaryWorkbook(buffer) {
@@ -264,9 +336,20 @@ export async function importRowsFromFile(file) {
   const buffer = await file.arrayBuffer();
   const bytes = new Uint8Array(buffer);
   const decoded = extension === "csv" ? decodeText(bytes) : null;
-  const workbook = extension === "csv"
-    ? parseCsvWorkbook(decoded.text)
-    : parseBinaryWorkbook(buffer);
+  if (extension === "csv") {
+    const delimiter = detectTextDelimiter(decoded.text);
+    const parsed = rowsFromTable(parseDelimitedText(decoded.text, delimiter));
+    const meta = {
+      ...parsed.meta,
+      original_filename: file.name,
+      original_extension: extension || "",
+      original_encoding: decoded.encoding || "",
+      original_delimiter: delimiter,
+    };
+    return normalizeRows(parsed.rows, meta);
+  }
+
+  const workbook = parseBinaryWorkbook(buffer);
   const firstSheetName = workbook.SheetNames[0];
   if (!firstSheetName) {
     return { rows: [], summary: "В файле не найдено листов.", columns: [] };
