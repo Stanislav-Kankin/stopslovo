@@ -271,6 +271,52 @@ function encodeUtf8WithBom(text) {
   return bytes;
 }
 
+function rowsFromObjects(objects) {
+  if (!objects.length) return [];
+  const headers = Object.keys(objects[0]);
+  return [
+    headers,
+    ...objects.map((row) => headers.map((header) => row[header]))
+  ];
+}
+
+export function exportResultsCsvBlob(rows, sourceRows = []) {
+  const sourceLookup = sourceRowsByRequestId(sourceRows);
+  const summaryData = aggregateByTerm(rows, sourceRows).map((item) => ({
+    "Слово": item.term,
+    "Риск": RISK_LABELS[item.risk] || item.risk,
+    "Количество": item.count,
+    "Рекомендуемая замена": item.replacements[0] || "",
+    "Источники": item.sources.join("; "),
+    "Комментарии ИИ": item.ai_comments.join("\n"),
+    "ID объявлений": item.ads.join(", ")
+  }));
+
+  const resultData = rows.map((row) => ({
+    ID: displayId(row, sourceLookup),
+    "Общий риск": RISK_LABELS[row.overall_risk] || row.overall_risk,
+    "Ручная проверка": row.manual_review_required ? "Да" : "Нет",
+    "Количество замечаний": uniqueIssues(row.issues).length,
+    "Проблемные слова": issueTerms(row.issues),
+    "Детали замечаний": issueDetails(row.issues),
+    "Исходный текст": row.original_text,
+    "Переписанный текст": row.rewritten_text,
+    "Резюме": localizeSystemText(row.summary),
+    "Дата проверки": row.processed_at
+  }));
+
+  const table = [
+    ["Сводка по словам"],
+    ...rowsFromObjects(summaryData),
+    [],
+    [],
+    ["Все объявления"],
+    ...rowsFromObjects(resultData)
+  ];
+  const csv = serializeCsvTable(table, "\t");
+  return new Blob([encodeUtf16LeWithBom(csv)], { type: "text/csv;charset=utf-16le" });
+}
+
 export function exportUpdatedSourceCsv(rows, sourceRows = [], sourceMeta = {}, replacementChoices = {}, filename = "стопслово-для-загрузки.csv") {
   const table = updatedSourceTable(rows, sourceRows, sourceMeta, replacementChoices);
   const normalizedTable = Array.isArray(table[0])

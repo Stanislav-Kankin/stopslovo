@@ -239,18 +239,18 @@ export function BatchSummary({
         </div>
         <div className="flex flex-wrap items-stretch gap-2">
           {onShare && (
-            <div className="flex min-w-[240px] flex-col gap-1">
+            <div className="relative min-w-[240px]">
               <button className={`secondary-button ${shareFlash ? "animate-pulse border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100" : ""}`} onClick={onShare}>
                 <Share2 className="h-4 w-4" /> {shareUrl ? "Ссылка готова" : "Поделиться"}
               </button>
               {shareUrl && (
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
+                <div className="absolute left-0 top-[calc(100%+6px)] z-20 w-[min(78vw,620px)] rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 shadow-lg dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-100">
                   <span className="font-semibold">Отчёт:</span>{" "}
                   <a className="underline" href={shareUrl} target="_blank" rel="noreferrer">{shareUrl}</a>
                 </div>
               )}
               {shareError && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100">
+                <div className="absolute left-0 top-[calc(100%+6px)] z-20 w-[min(78vw,520px)] rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900 shadow-lg dark:border-red-900 dark:bg-red-950 dark:text-red-100">
                   Не удалось создать ссылку: {shareError}
                 </div>
               )}

@@ -11,9 +11,8 @@ import { Login } from "./pages/Login";
 import { Pricing } from "./pages/Pricing";
 import { Register } from "./pages/Register";
 import { Terms } from "./pages/Terms";
-import { toExcelCsvBlob } from "./utils/csv";
 import { humanizeApiError } from "./utils/errors";
-import { exportResultsXlsx, exportUpdatedSourceCsv, exportUpdatedSourceXlsx } from "./utils/exportResults";
+import { exportResultsCsvBlob, exportResultsXlsx, exportUpdatedSourceCsv, exportUpdatedSourceXlsx } from "./utils/exportResults";
 import { importRowsFromFile } from "./utils/importRows";
 
 const BATCH_CHUNK_SIZE = 100;
@@ -1100,7 +1099,7 @@ function HomePage({ me, refreshMe }) {
   };
 
   const exportCsv = () => {
-    const blob = toExcelCsvBlob(batchResults, batchRows);
+    const blob = exportResultsCsvBlob(batchResults, batchRows);
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
