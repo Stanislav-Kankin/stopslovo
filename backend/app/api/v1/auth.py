@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -14,6 +14,7 @@ from sqlmodel import Session, select
 
 from app.db import get_session
 from app.models.user import User
+from app.services.email_service import send_welcome_email
 from app.services.quota import active_plan, get_remaining, next_monthly_renewal
 
 
@@ -147,7 +148,13 @@ def frontend_redirect(path: str = "/") -> RedirectResponse:
 
 
 @router.post("/register", response_model=AuthResponse)
-def register(payload: AuthRequest, request: Request, response: Response, session: Annotated[Session, Depends(get_session)]) -> dict:
+def register(
+    payload: AuthRequest,
+    request: Request,
+    response: Response,
+    background_tasks: BackgroundTasks,
+    session: Annotated[Session, Depends(get_session)],
+) -> dict:
     check_auth_rate_limit(request, "register")
     existing = session.exec(select(User).where(User.email == payload.email.lower())).first()
     if existing:
@@ -157,6 +164,7 @@ def register(payload: AuthRequest, request: Request, response: Response, session
     session.commit()
     session.refresh(user)
     set_auth_cookie(response, create_token(user.id))
+    background_tasks.add_task(send_welcome_email, user.email)
     return {"ok": True, "user": user_payload(user, session)}
 
 
@@ -220,12 +228,12 @@ def update_email(payload: UpdateEmailRequest, request: Request, session: Annotat
     return {"ok": True, "user": user_payload(user, session)}
 
 
-def get_or_create_oauth_user(session: Session, provider: str, oauth_id: str, email: str, email_placeholder: bool = False) -> User:
+def get_or_create_oauth_user(session: Session, provider: str, oauth_id: str, email: str, email_placeholder: bool = False) -> tuple[User, bool]:
     user = session.exec(
         select(User).where(User.oauth_provider == provider, User.oauth_id == oauth_id)
     ).first()
     if user:
-        return user
+        return user, False
     existing = session.exec(select(User).where(User.email == email.lower())).first()
     if existing:
         existing.oauth_provider = provider
@@ -234,12 +242,12 @@ def get_or_create_oauth_user(session: Session, provider: str, oauth_id: str, ema
         session.add(existing)
         session.commit()
         session.refresh(existing)
-        return existing
+        return existing, False
     user = User(email=email.lower(), oauth_provider=provider, oauth_id=oauth_id, oauth_email_placeholder=email_placeholder)
     session.add(user)
     session.commit()
     session.refresh(user)
-    return user
+    return user, True
 
 
 @router.get("/yandex")
@@ -256,7 +264,12 @@ def yandex_login() -> RedirectResponse:
 
 
 @router.get("/yandex/callback")
-async def yandex_callback(code: str, response: Response, session: Annotated[Session, Depends(get_session)]):
+async def yandex_callback(
+    code: str,
+    response: Response,
+    background_tasks: BackgroundTasks,
+    session: Annotated[Session, Depends(get_session)],
+):
     client_id = os.getenv("YANDEX_CLIENT_ID")
     client_secret = os.getenv("YANDEX_CLIENT_SECRET")
     if not client_id or not client_secret:
@@ -274,7 +287,9 @@ async def yandex_callback(code: str, response: Response, session: Annotated[Sess
     email = profile.get("default_email") or profile.get("emails", [None])[0]
     if not email:
         raise HTTPException(status_code=400, detail="Yandex не вернул email")
-    user = get_or_create_oauth_user(session, "yandex", str(profile["id"]), email)
+    user, created = get_or_create_oauth_user(session, "yandex", str(profile["id"]), email)
+    if created:
+        background_tasks.add_task(send_welcome_email, user.email)
     redirect = frontend_redirect("/")
     set_auth_cookie(redirect, create_token(user.id))
     return redirect
@@ -294,7 +309,12 @@ def vk_login() -> RedirectResponse:
 
 
 @router.get("/vk/callback")
-async def vk_callback(code: str, response: Response, session: Annotated[Session, Depends(get_session)]):
+async def vk_callback(
+    code: str,
+    response: Response,
+    background_tasks: BackgroundTasks,
+    session: Annotated[Session, Depends(get_session)],
+):
     client_id = os.getenv("VK_CLIENT_ID")
     client_secret = os.getenv("VK_CLIENT_SECRET")
     redirect_uri = f"{os.getenv('BACKEND_URL', '').rstrip('/')}/api/auth/vk/callback"
@@ -309,7 +329,9 @@ async def vk_callback(code: str, response: Response, session: Annotated[Session,
         payload = token.json()
     email_placeholder = not bool(payload.get("email"))
     email = payload.get("email") or f"vk-{payload['user_id']}@oauth.local"
-    user = get_or_create_oauth_user(session, "vk", str(payload["user_id"]), email, email_placeholder=email_placeholder)
+    user, created = get_or_create_oauth_user(session, "vk", str(payload["user_id"]), email, email_placeholder=email_placeholder)
+    if created and not email_placeholder:
+        background_tasks.add_task(send_welcome_email, user.email)
     redirect = frontend_redirect("/")
     set_auth_cookie(redirect, create_token(user.id))
     return redirect
