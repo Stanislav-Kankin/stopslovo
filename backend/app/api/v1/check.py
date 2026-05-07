@@ -1,9 +1,11 @@
 import json
+import os
 import re
+import time
 from datetime import datetime, timedelta
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from sqlmodel import Session, select
 
@@ -12,6 +14,7 @@ from app.api.v1.schemas import CheckBatchRequest, CheckBatchResponse, CheckTextR
 from app.db import get_session
 from app.models.user import CheckResult, SharedReport, User
 from app.services.dictionary_checker import DictionaryChecker
+from app.services.email_service import send_limit_exceeded_email, send_share_report_email
 from app.services.latin_detector import LatinDetector
 from app.services.llm_analyzer import LLMAnalyzer
 from app.services.morpho_normalizer import MorphoNormalizer
@@ -32,6 +35,8 @@ reporter = ReportGenerator()
 ANON_COOKIE = "stopslovo_anon_id"
 RESULT_TTL_HOURS = 24
 SHARE_TTL_DAYS = 14
+LIMIT_EMAIL_TTL_SECONDS = 12 * 60 * 60
+LIMIT_EMAIL_SENT: dict[str, float] = {}
 
 
 def _excluded_spans(text: str, excluded_terms: list[str]) -> list[tuple[int, int]]:
@@ -69,6 +74,23 @@ def _quota_error() -> JSONResponse:
             "upgrade_url": "/pricing",
         },
     )
+
+
+def _schedule_limit_email(
+    background_tasks: BackgroundTasks,
+    user: User | None,
+    plan: str,
+    limit_name: str,
+) -> None:
+    if not user:
+        return
+    key = f"{user.id}:{limit_name}"
+    now = time.monotonic()
+    last_sent = LIMIT_EMAIL_SENT.get(key, 0)
+    if now - last_sent < LIMIT_EMAIL_TTL_SECONDS:
+        return
+    LIMIT_EMAIL_SENT[key] = now
+    background_tasks.add_task(send_limit_exceeded_email, user.email, limit_name, plan)
 
 
 def _ai_quota_error(status_code: int = 402) -> JSONResponse:
@@ -174,11 +196,13 @@ def check_text(
     payload: CheckTextRequest,
     request: Request,
     response: Response,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ) -> dict | JSONResponse:
     user = get_user_from_request(request, session)
     user_id, plan, quota_started_at = _quota_identity(request, response, session)
     if not check_quota(session, user_id, plan, chars=_word_count(payload.text), rows=0, started_at=quota_started_at):
+        _schedule_limit_email(background_tasks, user, plan, "слова")
         return _quota_error()
     effective_payload = payload
     if payload.use_llm:
@@ -199,11 +223,13 @@ def check_batch(
     payload: CheckBatchRequest,
     request: Request,
     response: Response,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ) -> dict | JSONResponse:
     user = get_user_from_request(request, session)
     user_id, plan, quota_started_at = _quota_identity(request, response, session)
     if not check_quota(session, user_id, plan, chars=0, rows=len(payload.items), started_at=quota_started_at):
+        _schedule_limit_email(background_tasks, user, plan, "строки файлов")
         return _quota_error()
     llm_items_count = sum(1 for item in payload.items if item.use_llm)
     use_llm_in_batch = bool(user and llm_items_count and has_ai_quota(session, user.id, active_plan(user), amount=llm_items_count, started_at=user.created_at))
@@ -231,6 +257,7 @@ def refine_issue(
     payload: RefineIssueRequest,
     request: Request,
     response: Response,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ) -> dict | JSONResponse:
     user = get_user_from_request(request, session)
@@ -238,6 +265,7 @@ def refine_issue(
         return _ai_quota_error(status_code=401)
     user_id, plan = user.id, active_plan(user)
     if not has_ai_quota(session, user_id, plan, started_at=user.created_at):
+        _schedule_limit_email(background_tasks, user, plan, "ИИ-подсказки")
         return _ai_quota_error()
     clean_text = preprocessor.clean(payload.text)
     issue = payload.issue.model_dump()
@@ -264,7 +292,12 @@ def refine_issue(
 
 
 @router.post("/share")
-def create_shared_report(payload: dict, session: Session = Depends(get_session)) -> dict:
+def create_shared_report(
+    payload: dict,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    session: Session = Depends(get_session),
+) -> dict:
     kind = payload.get("kind")
     data = payload.get("data")
     if kind not in {"single", "batch"} or not isinstance(data, dict):
@@ -277,7 +310,18 @@ def create_shared_report(payload: dict, session: Session = Depends(get_session))
     session.add(report)
     session.commit()
     session.refresh(report)
-    return {"share_id": report.id, "url": f"/share/{report.id}", "expires_in_days": SHARE_TTL_DAYS}
+    share_path = f"/share/{report.id}"
+    user = get_user_from_request(request, session)
+    if user:
+        frontend_url = os.getenv("FRONTEND_URL", str(request.base_url).rstrip("/")).rstrip("/")
+        background_tasks.add_task(
+            send_share_report_email,
+            user.email,
+            f"{frontend_url}{share_path}",
+            kind,
+            SHARE_TTL_DAYS,
+        )
+    return {"share_id": report.id, "url": share_path, "expires_in_days": SHARE_TTL_DAYS}
 
 
 @router.get("/share/{share_id}")

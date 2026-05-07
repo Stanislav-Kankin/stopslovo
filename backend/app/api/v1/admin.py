@@ -4,13 +4,14 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 from sqlmodel import Session, func, select
 
 from app.api.v1.auth import get_current_user
 from app.db import get_session
 from app.models.user import UsageRecord, User
+from app.services.email_service import send_plan_activated_email
 from app.services.quota import apply_early_renewal
 
 
@@ -112,6 +113,7 @@ def list_users(
 @router.post("/users/plan")
 def update_user_plan(
     payload: UserPlanPayload,
+    background_tasks: BackgroundTasks,
     _: Annotated[User, Depends(require_admin)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict:
@@ -136,6 +138,7 @@ def update_user_plan(
     session.add(user)
     session.commit()
     session.refresh(user)
+    background_tasks.add_task(send_plan_activated_email, user.email, user.plan, user.plan_expires_at)
     return {
         "id": user.id,
         "email": user.email,
