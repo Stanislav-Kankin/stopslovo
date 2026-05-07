@@ -24,6 +24,15 @@ services:
       YOOKASSA_SECRET_KEY: ${YOOKASSA_SECRET_KEY:-}
       YOOKASSA_RETURN_URL: ${YOOKASSA_RETURN_URL:-https://localhost/pricing}
       YOOKASSA_WEBHOOK_SECRET: ${YOOKASSA_WEBHOOK_SECRET:-}
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:-stopslovo_supp@inbox.ru}
+      EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
+      SMTP_HOST: ${SMTP_HOST:-smtp.mail.ru}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-СтопСлово <stopslovo_supp@inbox.ru>}
+      SMTP_SSL: ${SMTP_SSL:-true}
+      SMTP_TLS: ${SMTP_TLS:-false}
       FRONTEND_URL: ${FRONTEND_URL:-https://localhost}
       BACKEND_URL: ${BACKEND_URL:-https://localhost}
       YANDEX_CLIENT_ID: ${YANDEX_CLIENT_ID:-}
