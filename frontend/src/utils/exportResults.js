@@ -20,6 +20,22 @@ const RISK_LABELS = {
   safe: "без замечаний"
 };
 
+const SOURCE_ID_COLUMNS = [
+  "ID объявления",
+  "№ объявления",
+  "ID объявления (серверный)",
+  "ID объявления (локальный)",
+  "ID кампании",
+  "ID кампании (серверный)",
+  "ID кампании (локальный)",
+  "ID группы",
+  "id объявления",
+  "id кампании",
+  "id группы",
+  "ID",
+  "id"
+];
+
 function localizeSystemText(value) {
   return String(value ?? "")
     .replace(/\boverall risk\b/gi, "общий риск")
@@ -64,9 +80,30 @@ function uniqueIssues(issues = []) {
   return [...map.values()];
 }
 
-function aggregateByTerm(rows) {
+function sourceValue(source = {}, variants = []) {
+  const entries = Object.entries(source);
+  for (const variant of variants) {
+    const found = entries.find(([key]) => String(key).trim().toLowerCase() === String(variant).trim().toLowerCase());
+    if (found && String(found[1] ?? "").trim()) return String(found[1]).trim();
+  }
+  return "";
+}
+
+function sourceRowsByRequestId(sourceRows = []) {
+  return new Map(sourceRows.map((row) => [row.request_id, row]));
+}
+
+function displayId(row, sourceLookup = new Map()) {
+  const requestId = String(row?.request_id || "");
+  if (requestId && !/^row-\d+$/i.test(requestId)) return requestId;
+  const sourceRow = sourceLookup.get(requestId);
+  return sourceValue(sourceRow?.source, SOURCE_ID_COLUMNS) || requestId;
+}
+
+function aggregateByTerm(rows, sourceRows = []) {
   const riskWeight = { high: 4, medium: 3, low: 2, safe: 1 };
   const map = {};
+  const sourceLookup = sourceRowsByRequestId(sourceRows);
   for (const row of rows) {
     for (const issue of uniqueIssues(row.issues || [])) {
       const key = issue.normalized || issue.term.toLowerCase();
@@ -81,7 +118,10 @@ function aggregateByTerm(rows) {
         };
       }
       map[key].count += 1;
-      map[key].ads.push(row.request_id);
+      const id = displayId(row, sourceLookup);
+      if (id && !map[key].ads.includes(id)) {
+        map[key].ads.push(id);
+      }
       for (const source of issue.sources || []) {
         if (!map[key].sources.includes(source)) {
           map[key].sources.push(source);
@@ -249,7 +289,8 @@ export function exportUpdatedSourceCsv(rows, sourceRows = [], sourceMeta = {}, r
 }
 
 export function exportResultsXlsx(rows, sourceRows = [], filename = "стопслово-результаты.xlsx") {
-  const summaryData = aggregateByTerm(rows).map((item) => ({
+  const sourceLookup = sourceRowsByRequestId(sourceRows);
+  const summaryData = aggregateByTerm(rows, sourceRows).map((item) => ({
     "Слово": item.term,
     "Риск": RISK_LABELS[item.risk] || item.risk,
     "Количество": item.count,
@@ -259,7 +300,7 @@ export function exportResultsXlsx(rows, sourceRows = [], filename = "стопс�
   }));
 
   const resultData = rows.map((row) => ({
-    ID: row.request_id,
+    ID: displayId(row, sourceLookup),
     "Общий риск": RISK_LABELS[row.overall_risk] || row.overall_risk,
     "Ручная проверка": row.manual_review_required ? "Да" : "Нет",
     "Количество замечаний": uniqueIssues(row.issues).length,

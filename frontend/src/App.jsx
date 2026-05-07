@@ -11,7 +11,7 @@ import { Login } from "./pages/Login";
 import { Pricing } from "./pages/Pricing";
 import { Register } from "./pages/Register";
 import { Terms } from "./pages/Terms";
-import { toCsv } from "./utils/csv";
+import { toExcelCsvBlob } from "./utils/csv";
 import { humanizeApiError } from "./utils/errors";
 import { exportResultsXlsx, exportUpdatedSourceCsv, exportUpdatedSourceXlsx } from "./utils/exportResults";
 import { importRowsFromFile } from "./utils/importRows";
@@ -563,6 +563,7 @@ function HighlightedRewrite({ text, issues }) {
 function ResultView({ result, onRefineIssue, onIgnoreIssue, refiningIssue, canUseAi, aiUnavailableReason, onShare }) {
   const [copied, setCopied] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
+  const [shareError, setShareError] = useState("");
   const [sharing, setSharing] = useState(false);
   if (!result) return null;
   const issues = uniqueIssues(result.issues);
@@ -577,10 +578,13 @@ function ResultView({ result, onRefineIssue, onIgnoreIssue, refiningIssue, canUs
   const share = async () => {
     if (!onShare) return;
     setSharing(true);
+    setShareError("");
     try {
       const url = await onShare();
       setShareUrl(url);
       await copyTextBestEffort(url);
+    } catch (err) {
+      setShareError(err.message || "Не удалось создать ссылку");
     } finally {
       setSharing(false);
     }
@@ -611,6 +615,11 @@ function ResultView({ result, onRefineIssue, onIgnoreIssue, refiningIssue, canUs
           {shareUrl && (
             <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
               Ссылка скопирована: <a className="underline" href={shareUrl} target="_blank" rel="noreferrer">{shareUrl}</a>
+            </div>
+          )}
+          {shareError && (
+            <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100">
+              Не удалось создать публичную ссылку: {shareError}
             </div>
           )}
           <HighlightedRewrite text={result.rewritten_text} issues={result.issues} />
@@ -730,6 +739,7 @@ function HomePage({ me, refreshMe }) {
   const [refiningIssue, setRefiningIssue] = useState("");
   const [stateRestored, setStateRestored] = useState(false);
   const [batchShareUrl, setBatchShareUrl] = useState("");
+  const [batchShareError, setBatchShareError] = useState("");
   const [replacementChoices, setReplacementChoices] = useState({});
 
   const excludedTerms = useMemo(() => parseExcludedTerms(excludedTermsText), [excludedTermsText]);
@@ -989,6 +999,8 @@ function HomePage({ me, refreshMe }) {
       setBatchImportColumns(imported.columns);
       setBatchSourceMeta(imported.meta || {});
       setBatchResults([]);
+      setBatchShareUrl("");
+      setBatchShareError("");
       setSelectedTerm("");
       setReplacementChoices({});
       setExpandedResults(new Set());
@@ -1011,6 +1023,7 @@ function HomePage({ me, refreshMe }) {
     setProgress(0);
     setBatchResults([]);
     setBatchShareUrl("");
+    setBatchShareError("");
     setSelectedTerm("");
     setExpandedResults(new Set());
     setPage(1);
@@ -1051,7 +1064,7 @@ function HomePage({ me, refreshMe }) {
   };
 
   const exportCsv = () => {
-    const blob = new Blob([toCsv(batchResults)], { type: "text/csv;charset=utf-8" });
+    const blob = toExcelCsvBlob(batchResults, batchRows);
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -1084,10 +1097,17 @@ function HomePage({ me, refreshMe }) {
   };
 
   const shareBatchReport = async () => {
-    const url = await createShareReport("batch", { results: batchResults });
-    setBatchShareUrl(url);
-    await copyTextBestEffort(url);
-    return url;
+    setBatchShareError("");
+    setBatchShareUrl("");
+    try {
+      const url = await createShareReport("batch", { results: batchResults });
+      setBatchShareUrl(url);
+      await copyTextBestEffort(url);
+      return url;
+    } catch (err) {
+      setBatchShareError(err.message || "Не удалось создать ссылку на отчёт");
+      return "";
+    }
   };
 
   const toggleResult = (requestId) => {
@@ -1206,6 +1226,11 @@ function HomePage({ me, refreshMe }) {
           {batchShareUrl && (
             <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
               Ссылка на отчёт скопирована: <a className="underline" href={batchShareUrl} target="_blank" rel="noreferrer">{batchShareUrl}</a>
+            </div>
+          )}
+          {batchShareError && (
+            <div className="error-box">
+              Не удалось создать публичную ссылку: {batchShareError}
             </div>
           )}
 
