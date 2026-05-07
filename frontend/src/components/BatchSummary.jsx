@@ -95,6 +95,12 @@ function adsLabel(count) {
   return "объявлений";
 }
 
+function formatAdIds(ids = []) {
+  const visible = ids.slice(0, 12);
+  const rest = ids.length - visible.length;
+  return `${visible.join(", ")}${rest > 0 ? ` и ещё ${rest}` : ""}`;
+}
+
 function uniqueIssues(issues = []) {
   const map = new Map();
   for (const issue of issues) {
@@ -356,6 +362,13 @@ export function BatchSummary({
               {term.ai_refined && term.ai_summary && (
                 <p className="mb-2 rounded-lg border border-sky-100 bg-sky-50 px-3 py-2 text-xs leading-relaxed text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-100">
                   {term.ai_summary}
+                </p>
+              )}
+
+              {term.ads?.length > 0 && (
+                <p className="mb-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                  <span className="font-semibold text-slate-600 dark:text-slate-300">ID объявлений:</span>{" "}
+                  {formatAdIds(term.ads)}
                 </p>
               )}
 

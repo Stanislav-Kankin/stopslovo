@@ -308,6 +308,18 @@ function markAiRefined(issue, summary = "") {
   };
 }
 
+function replaceIssueInText(textValue, issue, replacement) {
+  let next = String(textValue ?? "");
+  const variants = [issue?.term, issue?.normalized, ...(issue?.replacements || [])]
+    .filter(Boolean)
+    .sort((a, b) => String(b).length - String(a).length);
+  for (const variant of variants) {
+    const pattern = new RegExp(`(?<![\\p{L}\\p{N}_-])${escapeRegex(variant)}(?![\\p{L}\\p{N}_-])`, "giu");
+    next = next.replace(pattern, replacement);
+  }
+  return next;
+}
+
 function AiRobotIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -346,7 +358,7 @@ function IgnoreIssueButton({ onClick }) {
   );
 }
 
-function ReplacementChips({ replacements = [] }) {
+function ReplacementChips({ replacements = [], issue, selectedReplacement = "", onSelect }) {
   if (!replacements.length) return null;
   return (
     <div className="mb-2 mt-1.5 flex flex-wrap gap-1.5">
@@ -354,9 +366,19 @@ function ReplacementChips({ replacements = [] }) {
         <button
           key={replacement}
           type="button"
-          onClick={() => navigator.clipboard.writeText(replacement)}
-          className="rounded-full border border-[#e0e0da] bg-[#f7f7f3] px-2.5 py-1 text-xs text-[#1a1a18] transition hover:border-[#4a7c10] hover:text-[#4a7c10] dark:border-[#38505c] dark:bg-[#182630] dark:text-[#f4f7f2] dark:hover:border-[#7ed59a] dark:hover:text-[#7ed59a]"
-          title="Копировать"
+          onClick={() => {
+            if (onSelect) {
+              onSelect(issue, replacement);
+            } else {
+              navigator.clipboard.writeText(replacement);
+            }
+          }}
+          className={`rounded-full border px-2.5 py-1 text-xs transition ${
+            selectedReplacement === replacement
+              ? "border-[#4a7c10] bg-[#eef5e6] font-semibold text-[#3d6b10] dark:border-[#7ed59a] dark:bg-[#1a2e12] dark:text-[#a8d870]"
+              : "border-[#e0e0da] bg-[#f7f7f3] text-[#1a1a18] hover:border-[#4a7c10] hover:text-[#4a7c10] dark:border-[#38505c] dark:bg-[#182630] dark:text-[#f4f7f2] dark:hover:border-[#7ed59a] dark:hover:text-[#7ed59a]"
+          }`}
+          title={onSelect ? "Использовать эту замену в итоговом тексте" : "Копировать"}
         >
           {replacement}
         </button>
@@ -536,13 +558,18 @@ function SharedReportPage() {
 }
 
 function HighlightedText({ text, issues }) {
-  const terms = uniqueIssues(issues).filter((issue) => ["high", "medium"].includes(issue.risk)).map((issue) => issue.term);
+  const terms = uniqueIssues(issues)
+    .filter((issue) => ["high", "medium"].includes(issue.risk))
+    .flatMap((issue) => [issue.term, issue.normalized])
+    .filter(Boolean)
+    .sort((a, b) => String(b).length - String(a).length);
   if (!terms.length) return <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">{text}</p>;
   const pattern = new RegExp(`(${terms.map(escapeRegex).join("|")})`, "gi");
   return (
     <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">
       {text.split(pattern).map((part, index) => {
-        const issue = issues.find((item) => item.term.toLowerCase() === part.toLowerCase());
+        const partKey = part.toLowerCase();
+        const issue = issues.find((item) => item.term.toLowerCase() === partKey || item.normalized?.toLowerCase() === partKey);
         if (!issue) return <span key={`${part}-${index}`}>{part}</span>;
         const color = issue.risk === "high" ? "bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-100" : "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-100";
         return <mark key={`${part}-${index}`} className={`rounded px-1 ${color}`}>{part}</mark>;
@@ -599,6 +626,7 @@ function ResultView({ result, onRefineIssue, onIgnoreIssue, refiningIssue, canUs
   const [shareUrl, setShareUrl] = useState("");
   const [shareError, setShareError] = useState("");
   const [sharing, setSharing] = useState(false);
+  const [selectedReplacements, setSelectedReplacements] = useState({});
   if (!result) return null;
   const issues = uniqueIssues(result.issues);
   const highCount = issues.filter((issue) => issue.risk === "high").length;
@@ -622,6 +650,15 @@ function ResultView({ result, onRefineIssue, onIgnoreIssue, refiningIssue, canUs
     } finally {
       setSharing(false);
     }
+  };
+  const selectSingleReplacement = (issue, replacement) => {
+    const key = issueSoftKey(issue);
+    setSelectedReplacements((current) => ({ ...current, [key]: replacement }));
+    onRefineIssue?.({
+      ...issue,
+      __replacementOnly: true,
+      __selectedReplacement: replacement
+    });
   };
 
   return (
@@ -687,7 +724,12 @@ function ResultView({ result, onRefineIssue, onIgnoreIssue, refiningIssue, canUs
                       Вывод ИИ: {localizeSystemText(issue.ai_summary)}
                     </p>
                   )}
-                  <ReplacementChips replacements={issue.replacements} />
+                  <ReplacementChips
+                    replacements={issue.replacements}
+                    issue={issue}
+                    selectedReplacement={selectedReplacements[issueSoftKey(issue)] || ""}
+                    onSelect={onRefineIssue ? selectSingleReplacement : null}
+                  />
                   <IssueSources sources={issue.sources} />
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     {canUseAi ? (
@@ -911,6 +953,20 @@ function HomePage({ me, refreshMe }) {
   };
 
   const refineSingleIssue = async (issue) => {
+    if (issue?.__replacementOnly) {
+      const replacement = issue.__selectedReplacement;
+      setResult((current) => {
+        if (!current || !replacement) return current;
+        const cleanIssue = { ...issue };
+        delete cleanIssue.__replacementOnly;
+        delete cleanIssue.__selectedReplacement;
+        return {
+          ...current,
+          rewritten_text: replaceIssueInText(current.rewritten_text, cleanIssue, replacement)
+        };
+      });
+      return;
+    }
     const key = issueKey(issue);
     setRefiningIssue(key);
     setError("");

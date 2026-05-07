@@ -77,16 +77,16 @@ class DictionaryChecker:
             if self._is_cyrillic_abbreviation(token["term"]):
                 continue
             normalized = normalizer.normalize(token["term"])
+            entry, entry_normalized = self._lookup_cyrillic_entry(token["term"], normalized)
             if normalized in self.registered_names or normalized in global_allowlist or token["term"].lower().replace("ё", "е") in global_allowlist:
                 continue
-            entry = self.by_normalized.get(normalized)
             if entry and entry["risk_base"] == "safe":
                 continue
             if entry:
                 found.setdefault(
-                    (normalized, entry["script"]),
+                    (entry_normalized, entry["script"]),
                     self._issue(
-                        {**token, "normalized": normalized},
+                        {**token, "normalized": entry_normalized},
                         entry,
                         context_type,
                     ),
@@ -117,6 +117,20 @@ class DictionaryChecker:
             })
 
         return list(found.values())
+
+    def _lookup_cyrillic_entry(self, term: str, normalized: str) -> tuple[dict | None, str]:
+        normalized_key = normalized.lower().replace("ё", "е")
+        candidates = [normalized_key, term.lower().replace("ё", "е")]
+        for candidate in list(candidates):
+            if len(candidate) > 3 and candidate.endswith(("ы", "и")):
+                candidates.append(candidate[:-1])
+            if len(candidate) > 4 and candidate.endswith(("ов", "ев")):
+                candidates.append(candidate[:-2])
+        for candidate in candidates:
+            entry = self.by_normalized.get(candidate)
+            if entry:
+                return entry, entry["normalized"].lower().replace("ё", "е")
+        return None, normalized_key
 
     @staticmethod
     def _has_cyrillic(value: str) -> bool:
