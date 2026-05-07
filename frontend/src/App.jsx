@@ -2,7 +2,7 @@ import { AlertTriangle, Check, Clipboard, FileText, LogIn, LogOut, Moon, Search,
 import { useEffect, useMemo, useState } from "react";
 import { Link, Route, Routes, useParams } from "react-router-dom";
 
-import { BatchSummary } from "./components/BatchSummary";
+import { BatchSummary, aggregateByTerm } from "./components/BatchSummary";
 import { Footer } from "./components/Footer";
 import { QuotaWidget } from "./components/QuotaWidget";
 import { Admin } from "./pages/Admin";
@@ -524,6 +524,71 @@ function UpgradeAfterCheckBanner({ user, result }) {
   );
 }
 
+function SharedBatchOverview({ results, replacementChoices = {} }) {
+  if (!results.length) return null;
+
+  const terms = aggregateByTerm(results);
+  const adsWithIssues = results.filter((item) => item.issues?.length > 0).length;
+  const selectedEntries = Object.entries(replacementChoices).filter(([, value]) => String(value || "").trim());
+  const topTerms = terms.slice(0, 6);
+
+  return (
+    <div className="panel">
+      <p className="eyebrow">сводка</p>
+      <h2 className="section-title">Кратко по файлу</h2>
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <div className="rounded-lg bg-[var(--color-background-secondary)] p-3">
+          <p className="text-2xl font-semibold text-[var(--color-text-primary)]">{terms.length}</p>
+          <p className="text-xs text-[var(--color-text-tertiary)]">проблемных слов</p>
+        </div>
+        <div className="rounded-lg bg-[var(--color-background-secondary)] p-3">
+          <p className="text-2xl font-semibold text-[var(--color-text-primary)]">{adsWithIssues} / {results.length}</p>
+          <p className="text-xs text-[var(--color-text-tertiary)]">объявлений с замечаниями</p>
+        </div>
+        <div className="rounded-lg bg-[var(--color-background-secondary)] p-3">
+          <p className="text-2xl font-semibold text-[var(--color-text-primary)]">{selectedEntries.length}</p>
+          <p className="text-xs text-[var(--color-text-tertiary)]">выбранных замен</p>
+        </div>
+      </div>
+
+      {selectedEntries.length > 0 && (
+        <div className="mt-4">
+          <p className="mb-2 text-sm font-semibold text-[var(--color-text-primary)]">Выбранные замены</p>
+          <div className="flex flex-wrap gap-2">
+            {selectedEntries.map(([term, replacement]) => (
+              <span key={term} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
+                {term} → {replacement}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {topTerms.length > 0 && (
+        <div className="mt-4">
+          <p className="mb-2 text-sm font-semibold text-[var(--color-text-primary)]">Самые частые замечания</p>
+          <div className="grid gap-2">
+            {topTerms.map((term) => (
+              <div key={term.normalized || term.term} className="rounded-lg border border-[var(--color-border-tertiary)] px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-sm font-semibold text-[var(--color-text-primary)]">{term.term}</span>
+                  <RiskBadge risk={term.risk} />
+                  <span className="text-xs text-[var(--color-text-tertiary)]">{term.count} встреч.</span>
+                </div>
+                {term.ads?.length > 0 && (
+                  <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">
+                    ID объявлений: {term.ads.slice(0, 8).join(", ")}{term.ads.length > 8 ? ` и ещё ${term.ads.length - 8}` : ""}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SharedReportPage() {
   const { shareId } = useParams();
   const [report, setReport] = useState(null);
@@ -558,6 +623,7 @@ function SharedReportPage() {
   const createdAt = report.created_at ? new Date(report.created_at).toLocaleString("ru-RU") : "";
   const singleResult = report.kind === "single" ? report.data?.result : null;
   const batchResults = report.kind === "batch" ? report.data?.results || [] : [];
+  const sharedReplacementChoices = report.kind === "batch" ? report.data?.replacement_choices || {} : {};
 
   return (
     <section className="space-y-5">
@@ -570,12 +636,16 @@ function SharedReportPage() {
       </div>
       {singleResult && <ResultView result={singleResult} canUseAi={false} />}
       {batchResults.length > 0 && (
-        <BatchSummary
-          results={batchResults}
-          selectedTerm=""
-          onSelectTerm={() => {}}
-          canUseAi={false}
-        />
+        <>
+          <SharedBatchOverview results={batchResults} replacementChoices={sharedReplacementChoices} />
+          <BatchSummary
+            results={batchResults}
+            selectedTerm=""
+            onSelectTerm={() => {}}
+            canUseAi={false}
+            replacementChoices={sharedReplacementChoices}
+          />
+        </>
       )}
       <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -1232,7 +1302,13 @@ function HomePage({ me, refreshMe }) {
         ...row,
         display_id: displayBatchId(row, batchSourceLookup)
       }));
-      const url = await createShareReport("batch", { results: resultsForShare });
+      const selectedReplacements = Object.fromEntries(
+        Object.entries(replacementChoices).filter(([, value]) => String(value || "").trim())
+      );
+      const url = await createShareReport("batch", {
+        results: resultsForShare,
+        replacement_choices: selectedReplacements
+      });
       setBatchShareUrl(url);
       await copyTextBestEffort(url);
       return url;
