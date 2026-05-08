@@ -61,3 +61,12 @@ class PaymentRecord(SQLModel, table=True):
     raw_json: str | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class SubscriptionReminder(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: str = Field(foreign_key="user.id", index=True)
+    plan: str
+    plan_expires_at: datetime = Field(index=True)
+    threshold_days: int
+    sent_at: datetime = Field(default_factory=datetime.utcnow, index=True)

@@ -210,6 +210,37 @@ def send_limit_exceeded_email(to_email: str, limit_name: str, plan: str) -> bool
     return send_email(to_email, subject, text, html)
 
 
+def send_subscription_reminder_email(to_email: str, plan: str, expires_at: datetime, days_left: int) -> bool:
+    plan_name = PLAN_NAMES.get(plan, plan)
+    frontend_url = os.getenv("FRONTEND_URL", "https://stopslovo.dev-cloud-ksa.ru").rstrip("/")
+    pricing_url = f"{frontend_url}/pricing"
+    support_email = os.getenv("SUPPORT_EMAIL", "stopslovo_supp@inbox.ru")
+    expires_text = _format_dt(expires_at)
+    day_word = "день" if days_left == 1 else "дня" if 2 <= days_left <= 4 else "дней"
+    subject = f"Тариф «{plan_name}» заканчивается через {days_left} {day_word}"
+    text = (
+        "Здравствуйте!\n\n"
+        f"Ваш тариф «{plan_name}» действует до {expires_text}.\n"
+        f"До окончания осталось {days_left} {day_word}.\n\n"
+        "Чтобы проверка рекламных текстов не прерывалась, продлите доступ заранее.\n\n"
+        f"Продлить доступ: {pricing_url}\n"
+        f"Поддержка: {support_email}\n\n"
+        "Если вы уже продлили тариф, это письмо можно проигнорировать."
+    )
+    html = f"""
+    <div style="font-family:Arial,sans-serif;line-height:1.5;color:#1f2a37">
+      <h2>Тариф «{plan_name}» скоро закончится</h2>
+      <p>Ваш тариф действует до <strong>{expires_text}</strong>.</p>
+      <p>До окончания осталось <strong>{days_left} {day_word}</strong>.</p>
+      <p>Чтобы проверка рекламных текстов не прерывалась, продлите доступ заранее.</p>
+      <p><a href="{pricing_url}" style="color:#4a7c10;font-weight:bold">Продлить доступ</a></p>
+      <p>Поддержка: <a href="mailto:{support_email}">{support_email}</a></p>
+      <p style="font-size:12px;color:#667085">Если вы уже продлили тариф, это письмо можно проигнорировать.</p>
+    </div>
+    """
+    return send_email(to_email, subject, text, html)
+
+
 def send_test_email(to_email: str) -> bool:
     frontend_url = os.getenv("FRONTEND_URL", "https://stopslovo.dev-cloud-ksa.ru").rstrip("/")
     return send_email(

@@ -13,6 +13,7 @@ from app.db import get_session
 from app.models.user import UsageRecord, User
 from app.services.email_service import send_plan_activated_email
 from app.services.quota import apply_early_renewal
+from app.services.subscription_reminders import send_due_subscription_reminders
 
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -66,6 +67,14 @@ def overview(
             for user in recent_users
         ],
     }
+
+
+@router.post("/subscription-reminders/send")
+def send_subscription_reminders_now(
+    _: Annotated[User, Depends(require_admin)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict:
+    return send_due_subscription_reminders(session)
 
 
 @router.get("/users")

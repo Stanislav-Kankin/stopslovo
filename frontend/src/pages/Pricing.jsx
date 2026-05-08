@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 const plans = [
   {
     id: "free",
@@ -71,6 +73,20 @@ function daysUntil(value) {
   return `${diff} дн.`;
 }
 
+async function createCheckout(plan) {
+  const response = await fetch("/api/billing/checkout", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ plan }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.detail || payload.message || "Не удалось создать ссылку на оплату.");
+  }
+  return payload;
+}
+
 function Meter({ label, used, limit, rollover, rolloverExpiresAt }) {
   const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 100;
   return (
@@ -94,7 +110,7 @@ function Meter({ label, used, limit, rollover, rolloverExpiresAt }) {
   );
 }
 
-function CurrentPlan({ user }) {
+function CurrentPlan({ user, onRenew, isPaying }) {
   if (!user) return null;
   const renewalDate = user.plan === "free" ? user.quota_resets_at : user.plan_expires_at;
   const renewalText = renewalDate
@@ -109,7 +125,18 @@ function CurrentPlan({ user }) {
           <p className="eyebrow">текущий план</p>
           <h2 className="section-title">Ваш текущий тариф: {planLabels[user.plan] || user.plan}</h2>
         </div>
-        {renewalText && <span className="rounded-full border border-[#d6d8cf] bg-white/70 px-3 py-1 text-xs font-medium text-[#65655d] dark:border-[#3b5361] dark:bg-[#243744]/70 dark:text-[#c1d0cc]">{renewalText}</span>}
+        <div className="flex flex-wrap items-center gap-2">
+          {renewalText && <span className="rounded-full border border-[#d6d8cf] bg-white/70 px-3 py-1 text-xs font-medium text-[#65655d] dark:border-[#3b5361] dark:bg-[#243744]/70 dark:text-[#c1d0cc]">{renewalText}</span>}
+          {user.plan !== "free" && user.plan !== "one_time" && (
+            <button
+              className="primary-button px-4 py-2 text-sm"
+              disabled={isPaying === user.plan}
+              onClick={() => onRenew(user.plan)}
+            >
+              {isPaying === user.plan ? "Готовим оплату..." : "Продлить доступ"}
+            </button>
+          )}
+        </div>
       </div>
       <div className="grid gap-4 lg:grid-cols-3">
         <Meter label="Слова" used={user.chars_used ?? 0} limit={user.chars_limit ?? 0} rollover={user.chars_rollover ?? 0} rolloverExpiresAt={user.rollover_expires_at} />
@@ -121,6 +148,27 @@ function CurrentPlan({ user }) {
 }
 
 export function Pricing({ user }) {
+  const [payingPlan, setPayingPlan] = useState("");
+  const [paymentError, setPaymentError] = useState("");
+
+  async function startPayment(planId) {
+    if (planId === "free") return;
+    setPaymentError("");
+    setPayingPlan(planId);
+    try {
+      const payload = await createCheckout(planId);
+      if (payload.confirmation_url) {
+        window.location.href = payload.confirmation_url;
+        return;
+      }
+      setPaymentError("Ссылка на оплату не получена. Попробуйте ещё раз или напишите в поддержку.");
+    } catch (error) {
+      setPaymentError(error.message || "Не удалось создать ссылку на оплату.");
+    } finally {
+      setPayingPlan("");
+    }
+  }
+
   return (
     <section className="space-y-6">
       <div>
@@ -129,7 +177,13 @@ export function Pricing({ user }) {
         <p className="text-slate-600 dark:text-slate-300">Сравните текущие лимиты и выберите тариф под объём рекламных текстов.</p>
       </div>
 
-      <CurrentPlan user={user} />
+      <CurrentPlan user={user} onRenew={startPayment} isPaying={payingPlan} />
+
+      {paymentError && (
+        <div className="rounded-[12px] border border-[#f2c7c7] bg-[#fff0f0] px-4 py-3 text-sm text-[#a32d2d] dark:border-[#7c2f2f] dark:bg-[#321d1d] dark:text-[#f2b8b8]">
+          {paymentError}
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         {plans.map((plan) => {
@@ -150,9 +204,9 @@ export function Pricing({ user }) {
               <button
                 className={active ? "secondary-button mt-auto cursor-default" : "primary-button mt-auto"}
                 disabled={active}
-                onClick={() => alert("Оплата через ЮKassa — скоро")}
+                onClick={() => startPayment(plan.id)}
               >
-                {active ? "Текущий тариф" : "Выбрать тариф"}
+                {active ? "Текущий тариф" : payingPlan === plan.id ? "Готовим оплату..." : "Выбрать тариф"}
               </button>
             </article>
           );
