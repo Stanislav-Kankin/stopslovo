@@ -1331,7 +1331,7 @@ function HomePage({ me, refreshMe }) {
           <Search className="h-4 w-4" /> Один текст
         </button>
         <button className={mode === "batch" ? "active" : ""} onClick={() => setMode("batch")}>
-          <FileText className="h-4 w-4" /> Загрузить файл
+          <FileText className="h-4 w-4" /> Кампания из Директа (CSV)
         </button>
       </div>
 
@@ -1358,6 +1358,7 @@ function HomePage({ me, refreshMe }) {
           <section className="panel">
             <div className="grid gap-4">
             <textarea className="input check-textarea min-h-[140px] resize-y" value={text} onChange={(event) => setText(event.target.value)} />
+            <p className="text-sm text-slate-500 dark:text-slate-400">Для быстрой проверки объявления, баннера, письма или текста посадочной страницы.</p>
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className={`text-sm ${singleTextCounterClass}`}>{text.length} символов</span>
                 <button className="primary-button" disabled={loading || !text.trim()} onClick={checkSingle}>
@@ -1382,7 +1383,13 @@ function HomePage({ me, refreshMe }) {
               </button>
             </div>
             <div className="mt-4 rounded-md border border-sky-100 bg-sky-50 px-3 py-2 text-sm text-slate-700 dark:border-[#3d6880] dark:bg-[#1e3442] dark:text-[#d6eef8]">
-              Загрузите Excel или CSV из рекламного кабинета. Подойдут колонки с заголовками, описаниями, подзаголовками, быстрыми ссылками и уточнениями.
+              Загрузите CSV или Excel-выгрузку из Яндекс Директа. Сервис проверит заголовки, тексты объявлений, быстрые ссылки и уточнения, не трогая ключевые фразы, минус-слова и технические URL.
+            </div>
+            <div className="mt-3 grid gap-2 rounded-xl border border-[#e0e0da] bg-[#f7f7f3] p-3 text-sm text-slate-700 dark:border-[#38505c] dark:bg-[#182630] dark:text-[#d6e1dd] md:grid-cols-4">
+              <div><span className="font-semibold text-[#4a7c10] dark:text-[#a8d870]">1.</span> Выгрузите кампанию из Директ Коммандера</div>
+              <div><span className="font-semibold text-[#4a7c10] dark:text-[#a8d870]">2.</span> Загрузите файл сюда</div>
+              <div><span className="font-semibold text-[#4a7c10] dark:text-[#a8d870]">3.</span> Выберите подходящие замены</div>
+              <div><span className="font-semibold text-[#4a7c10] dark:text-[#a8d870]">4.</span> Скачайте файл для обратной загрузки</div>
             </div>
             {batchImportSummary && (
               <div className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-[#5aa978] dark:bg-[#203c34] dark:text-[#bdf2cf]">
@@ -1600,7 +1607,12 @@ export default function App() {
             <Link to="/">
               <img src="/logo.svg" alt="СтопСлово" className="h-10 dark:hidden" />
               <img src="/logo-dark.svg" alt="СтопСлово" className="hidden h-10 dark:block" />
-              <p className="mt-2 text-sm font-medium text-[#7a7a70] dark:text-[#c1d0cc]">Автоматическая оценка риска для рекламных текстов</p>
+              <p className="mt-2 text-sm font-medium text-[#7a7a70] dark:text-[#c1d0cc]">Проверка рекламных кампаний на англицизмы и рискованные формулировки</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <span className="rounded-full border border-[#c2d99a] bg-[#eef5e6] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#3d6b10] dark:border-[#3d6020] dark:bg-[#1a2e12] dark:text-[#a8d870]">168-ФЗ</span>
+                <span className="rounded-full border border-[#c2d99a] bg-[#eef5e6] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#3d6b10] dark:border-[#3d6020] dark:bg-[#1a2e12] dark:text-[#a8d870]">рекламные кампании</span>
+                <span className="rounded-full border border-[#c2d99a] bg-[#eef5e6] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#3d6b10] dark:border-[#3d6020] dark:bg-[#1a2e12] dark:text-[#a8d870]">Директ</span>
+              </div>
             </Link>
             <div className="flex flex-wrap items-center justify-end gap-3">
               <Link className="secondary-button hidden sm:inline-flex" to="/">На главную</Link>

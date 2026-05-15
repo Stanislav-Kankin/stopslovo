@@ -265,7 +265,7 @@ export function BatchSummary({
           )}
           <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#c8e6a0] bg-[#f5faf0] p-1.5 dark:border-[#3d6020] dark:bg-[#1a2810]">
             <span className="px-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#4a7c10] dark:text-[#a8d870]">
-              для загрузки
+              для Директа
             </span>
             {onDownloadUpdatedCsv && (
               <button className="primary-button" onClick={onDownloadUpdatedCsv}>
