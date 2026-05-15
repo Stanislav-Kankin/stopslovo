@@ -116,6 +116,7 @@
     {"term": "питч", "normalized": "питч", "script": "cyrillic_borrowing", "category": "business", "risk_base": "medium", "replacements": ["презентация идеи", "короткое предложение"]},
     {"term": "стартап", "normalized": "стартап", "script": "cyrillic_borrowing", "category": "business", "risk_base": "medium", "replacements": ["новый проект", "молодая компания"]},
     {"term": "скрипт", "normalized": "скрипт", "script": "cyrillic_borrowing", "category": "business", "risk_base": "medium", "replacements": ["сценарий", "текст разговора"]},
+    {"term": "спринт", "normalized": "спринт", "script": "cyrillic_borrowing", "category": "business", "risk_base": "medium", "replacements": ["короткий этап", "этап работы"]},
     {"term": "кейс", "normalized": "кейс", "script": "cyrillic_borrowing", "category": "business", "risk_base": "medium", "replacements": ["пример", "практический пример"]},
     {"term": "роадмап", "normalized": "роадмап", "script": "cyrillic_borrowing", "category": "business", "risk_base": "medium", "replacements": ["дорожная карта", "план развития"]},
     {"term": "ресерч", "normalized": "ресерч", "script": "cyrillic_borrowing", "category": "business", "risk_base": "medium", "replacements": ["исследование", "анализ"]},

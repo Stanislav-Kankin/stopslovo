@@ -19,7 +19,8 @@ RISK_LABELS = {
 }
 
 
-SYSTEM_PROMPT = """You are a compliance analysis engine for Russian advertising law (Federal Law No. 149-FZ).
+SYSTEM_PROMPT = """You are a compliance analysis engine for Russian-language advertising and public-facing text.
+Use Federal Law No. 168-FZ of 24 June 2025 as the relevant amendment act for restrictions on unjustified foreign words, together with the baseline rules of Russian advertising law and the law on the state language.
 
 The core legal principle: if a foreign word or Cyrillic borrowing has a commonly used
 Russian equivalent, it must be replaced in advertising and consumer-facing content.
@@ -266,7 +267,14 @@ class LLMAnalyzer:
         else:
             data = json.loads(self._extract_json(content))
             summary_text = data.get("summary", "")
-        data["issues"] = self._dedupe_issues(data.get("issues", []))
+        llm_overall = data.get("overall_risk", "safe")
+        data["issues"] = self._normalize_llm_risks(self._dedupe_issues(data.get("issues", [])))
+        data["overall_risk"] = self.scorer.score(data["issues"])
+        if data["overall_risk"] == "high" and not data.get("manual_review_required"):
+            data["manual_review_required"] = True
+            data["manual_review_reason"] = "В тексте найден высокий риск, нужна ручная проверка."
+        if data["overall_risk"] != llm_overall:
+            summary_text = ""
         if not summary_text:
             summary_text = self._summary(
                 data.get("issues", []),
@@ -277,6 +285,32 @@ class LLMAnalyzer:
             )
         data["summary"] = self._ensure_disclaimer(self._localize_summary(summary_text))
         return data
+
+    @staticmethod
+    def _normalize_llm_risks(issues: list[dict]) -> list[dict]:
+        strong_markers = (
+            "англицизм",
+            "заимствован",
+            "недопустим",
+            "требует замены",
+            "подлежит замене",
+            "должно быть замен",
+            "есть русский эквивалент",
+            "имеет русский эквивалент",
+            "есть общепотребительный русский",
+            "имеет общепотребительный русский",
+            "common russian equivalent",
+            "must be replaced",
+            "should be replaced",
+        )
+        for issue in issues:
+            reason = str(issue.get("reason", "")).lower()
+            replacements = issue.get("replacements") or []
+            keep_as_is = bool(issue.get("keep_as_is"))
+            if issue.get("risk") == "medium" and replacements and not keep_as_is:
+                if any(marker in reason for marker in strong_markers):
+                    issue["risk"] = "high"
+        return issues
 
     def _fallback(
         self,

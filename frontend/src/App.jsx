@@ -729,7 +729,6 @@ function ResultView({ result, onRefineIssue, onIgnoreIssue, refiningIssue, canUs
   const issues = uniqueIssues(result.issues);
   const highCount = issues.filter((issue) => issue.risk === "high").length;
   const mediumCount = issues.filter((issue) => issue.risk === "medium").length;
-  const safeCount = issues.filter((issue) => issue.risk === "safe" || issue.risk === "low").length;
   const copy = async () => {
     await navigator.clipboard.writeText(result.rewritten_text);
     setCopied(true);
@@ -860,10 +859,9 @@ function ResultView({ result, onRefineIssue, onIgnoreIssue, refiningIssue, canUs
             </div>
             <RiskIcon risk={result.overall_risk} />
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <StatCell num={highCount} label="высокий" color="#a32d2d" />
             <StatCell num={mediumCount} label="средний" color="#854f0b" />
-            <StatCell num={safeCount} label="ок" color="#3d6b10" />
           </div>
           {result.manual_review_required && (
             <div className="mt-3 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100">
