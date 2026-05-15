@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const plans = [
   {
@@ -87,6 +87,18 @@ async function createCheckout(plan) {
   return payload;
 }
 
+async function syncPayment(paymentId) {
+  const response = await fetch(`/api/billing/payments/${paymentId}/sync`, {
+    method: "POST",
+    credentials: "include",
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.detail || payload.message || "Не удалось проверить оплату.");
+  }
+  return payload;
+}
+
 function Meter({ label, used, limit, rollover, rolloverExpiresAt }) {
   const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 100;
   return (
@@ -150,6 +162,35 @@ function CurrentPlan({ user, onRenew, isPaying }) {
 export function Pricing({ user }) {
   const [payingPlan, setPayingPlan] = useState("");
   const [paymentError, setPaymentError] = useState("");
+  const [paymentNotice, setPaymentNotice] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paymentId = params.get("payment_id");
+    if (!paymentId) return;
+
+    let cancelled = false;
+    syncPayment(paymentId)
+      .then((payload) => {
+        if (cancelled) return;
+        if (payload.status === "succeeded") {
+          setPaymentNotice("Оплата прошла, тариф активирован. Обновляем данные...");
+          window.history.replaceState({}, "", window.location.pathname);
+          setTimeout(() => window.location.reload(), 900);
+        } else {
+          setPaymentNotice("Платёж создан. Если вы уже оплатили, статус обновится после уведомления ЮKassa.");
+          window.history.replaceState({}, "", window.location.pathname);
+        }
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setPaymentError(error.message || "Не удалось проверить оплату.");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function startPayment(planId) {
     if (planId === "free") return;
@@ -182,6 +223,12 @@ export function Pricing({ user }) {
       {paymentError && (
         <div className="rounded-[12px] border border-[#f2c7c7] bg-[#fff0f0] px-4 py-3 text-sm text-[#a32d2d] dark:border-[#7c2f2f] dark:bg-[#321d1d] dark:text-[#f2b8b8]">
           {paymentError}
+        </div>
+      )}
+
+      {paymentNotice && (
+        <div className="rounded-[12px] border border-[#c8e6a0] bg-[#f0f7e6] px-4 py-3 text-sm text-[#2d5010] dark:border-[#3d6020] dark:bg-[#1e2d10] dark:text-[#a8d870]">
+          {paymentNotice}
         </div>
       )}
 
