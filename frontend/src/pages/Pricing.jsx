@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-const plans = [
+const basePlans = [
   {
     id: "free",
     name: "Бесплатный",
@@ -55,6 +55,20 @@ const planLabels = {
 
 function formatLimit(value) {
   return value < 0 ? "∞" : Number(value || 0).toLocaleString("ru-RU");
+}
+
+function formatPriceKopecks(value) {
+  const amount = Number(value || 0) / 100;
+  return `${amount.toLocaleString("ru-RU", { maximumFractionDigits: 0 })} ₽`;
+}
+
+async function fetchBillingPlans() {
+  const response = await fetch("/api/billing/plans", { credentials: "include" });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.detail || payload.message || "Не удалось загрузить тарифы.");
+  }
+  return payload.items || [];
 }
 
 function formatDate(value) {
@@ -163,6 +177,7 @@ export function Pricing({ user }) {
   const [payingPlan, setPayingPlan] = useState("");
   const [paymentError, setPaymentError] = useState("");
   const [paymentNotice, setPaymentNotice] = useState("");
+  const [plans, setPlans] = useState(basePlans);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -185,6 +200,33 @@ export function Pricing({ user }) {
       .catch((error) => {
         if (cancelled) return;
         setPaymentError(error.message || "Не удалось проверить оплату.");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchBillingPlans()
+      .then((items) => {
+        if (cancelled) return;
+        const catalog = new Map(items.map((item) => [item.id, item]));
+        setPlans(
+          basePlans.map((plan) => {
+            const paidPlan = catalog.get(plan.id);
+            if (!paidPlan) return plan;
+            return {
+              ...plan,
+              price: formatPriceKopecks(paidPlan.amount_kopecks),
+              amount_kopecks: paidPlan.amount_kopecks,
+            };
+          })
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setPlans(basePlans);
       });
 
     return () => {
