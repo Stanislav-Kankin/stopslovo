@@ -1598,8 +1598,8 @@ export default function App() {
         <header className="site-header">
           <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-5">
             <Link to="/">
-              <img src="/logo.svg" alt="СтопСлово" className="h-9 dark:hidden" />
-              <img src="/logo-dark.svg" alt="СтопСлово" className="hidden h-9 dark:block" />
+              <img src="/logo.svg" alt="СтопСлово" className="h-10 dark:hidden" />
+              <img src="/logo-dark.svg" alt="СтопСлово" className="hidden h-10 dark:block" />
               <p className="mt-2 text-sm font-medium text-[#7a7a70] dark:text-[#c1d0cc]">Автоматическая оценка риска для рекламных текстов</p>
             </Link>
             <div className="flex flex-wrap items-center justify-end gap-3">
